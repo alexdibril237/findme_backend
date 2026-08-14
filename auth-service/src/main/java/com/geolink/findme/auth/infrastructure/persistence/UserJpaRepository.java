@@ -15,12 +15,14 @@ public interface UserJpaRepository extends JpaRepository<UserJpaEntity, UUID> {
 
     Optional<UserJpaEntity> findByEmail(String email);
 
+    // :search est casté en string : sur PostgreSQL un paramètre null non typé est lié en bytea,
+    // ce qui fait échouer CONCAT/LOWER. Le CAST fixe le type texte du placeholder.
     @Query("""
             SELECT u FROM UserJpaEntity u
             WHERE :search IS NULL
-               OR LOWER(u.email) LIKE LOWER(CONCAT('%', :search, '%'))
-               OR LOWER(u.firstName) LIKE LOWER(CONCAT('%', :search, '%'))
-               OR LOWER(u.lastName) LIKE LOWER(CONCAT('%', :search, '%'))
+               OR LOWER(u.email) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))
+               OR LOWER(u.firstName) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))
+               OR LOWER(u.lastName) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))
             """)
     Page<UserJpaEntity> search(@Param("search") String search, Pageable pageable);
 }
