@@ -1,0 +1,144 @@
+services:
+
+  auth-db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: auth_db
+      POSTGRES_USER: auth_user
+      POSTGRES_PASSWORD: auth_pass
+    volumes:
+      - auth_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U auth_user -d auth_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  address-db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: address_db
+      POSTGRES_USER: address_user
+      POSTGRES_PASSWORD: address_pass
+    volumes:
+      - address_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U address_user -d address_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  admin-db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: admin_db
+      POSTGRES_USER: admin_user
+      POSTGRES_PASSWORD: admin_pass
+    volumes:
+      - admin_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin_user -d admin_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: auth-service/Dockerfile
+    depends_on:
+      auth-db:
+        condition: service_healthy
+    environment:
+      DB_HOST: auth-db
+      DB_PORT: 5432
+      DB_NAME: auth_db
+      DB_USER: auth_user
+      DB_PASSWORD: auth_pass
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+    ports:
+      - '8081:8081'
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8081/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  address-service:
+    build:
+      context: .
+      dockerfile: address-service/Dockerfile
+    depends_on:
+      address-db:
+        condition: service_healthy
+    environment:
+      DB_HOST: address-db
+      DB_PORT: 5432
+      DB_NAME: address_db
+      DB_USER: address_user
+      DB_PASSWORD: address_pass
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      STORAGE_ROOT: /data/photos
+      STORAGE_PUBLIC_BASE_URL: http://localhost:8080/files
+    volumes:
+      - address_photos:/data/photos
+    ports:
+      - '8082:8082'
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8082/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  admin-service:
+    build:
+      context: .
+      dockerfile: admin-service/Dockerfile
+    depends_on:
+      admin-db:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+      address-service:
+        condition: service_healthy
+    environment:
+      DB_HOST: admin-db
+      DB_PORT: 5432
+      DB_NAME: admin_db
+      DB_USER: admin_user
+      DB_PASSWORD: admin_pass
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      AUTH_SERVICE_URL: http://auth-service:8081
+      ADDRESS_SERVICE_URL: http://address-service:8082
+    ports:
+      - '8083:8083'
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8083/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      address-service:
+        condition: service_healthy
+      admin-service:
+        condition: service_healthy
+    environment:
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      AUTH_SERVICE_URL: http://auth-service:8081
+      ADDRESS_SERVICE_URL: http://address-service:8082
+      ADMIN_SERVICE_URL: http://admin-service:8083
+    ports:
+      - '8080:8080'
+
+volumes:
+  auth_db_data:
+  address_db_data:
+  admin_db_data:
+  address_photos:
