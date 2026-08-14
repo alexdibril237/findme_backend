@@ -11,10 +11,10 @@ COPY api-gateway/pom.xml api-gateway/pom.xml
 COPY .mvn .mvn
 COPY mvnw .
 
-RUN --mount=type=cache,target=/root/.m2 chmod +x mvnw && ./mvnw -q -pl api-gateway -am dependency:go-offline
+RUN --mount=type=cache,target=/root/.m2/repository chmod +x mvnw && ./mvnw -q -pl api-gateway -am dependency:go-offline
 
 COPY api-gateway api-gateway
-RUN --mount=type=cache,target=/root/.m2 ./mvnw -q -pl api-gateway -am package -DskipTests
+RUN --mount=type=cache,target=/root/.m2/repository ./mvnw -q -pl api-gateway -am package -DskipTests
 
 FROM eclipse-temurin:21-jre
 WORKDIR /app

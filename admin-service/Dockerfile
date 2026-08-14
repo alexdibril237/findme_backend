@@ -11,10 +11,10 @@ COPY api-gateway/pom.xml api-gateway/pom.xml
 COPY .mvn .mvn
 COPY mvnw .
 
-RUN --mount=type=cache,target=/root/.m2 chmod +x mvnw && ./mvnw -q -pl admin-service -am dependency:go-offline
+RUN --mount=type=cache,target=/root/.m2/repository chmod +x mvnw && ./mvnw -q -pl admin-service -am dependency:go-offline
 
 COPY admin-service admin-service
-RUN --mount=type=cache,target=/root/.m2 ./mvnw -q -pl admin-service -am package -DskipTests
+RUN --mount=type=cache,target=/root/.m2/repository ./mvnw -q -pl admin-service -am package -DskipTests
 
 FROM eclipse-temurin:21-jre
 WORKDIR /app
