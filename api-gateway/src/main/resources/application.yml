@@ -1,0 +1,30 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+
+jwt:
+  secret: ${JWT_SECRET:change-me-in-production-change-me-in-production}
+
+routes:
+  auth-service:
+    base-url: ${AUTH_SERVICE_URL:http://localhost:8081}
+    prefixes: /api/auth,/api/users
+  address-service:
+    base-url: ${ADDRESS_SERVICE_URL:http://localhost:8082}
+    prefixes: /api/addresses,/files
+  admin-service:
+    base-url: ${ADMIN_SERVICE_URL:http://localhost:8083}
+    prefixes: /api/admin,/api/support
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  level:
+    com.geolink.findme: INFO
