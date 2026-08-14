@@ -1,0 +1,317 @@
+{
+  "info": {
+    "name": "findMe Backend — Projet 6 (GeoLink Africa)",
+    "description": "Collection prouvant l'équivalence entre le backend réel et les contrats d'API du Projet 4.\nToutes les requêtes passent par l'API Gateway ({{baseUrl}} = http://localhost:8080).\nLancer 'Auth > Signin' (ou 'Signup') d'abord : le token d'accès et le refresh token sont capturés automatiquement dans les variables de collection.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "accessToken", "value": "" },
+    { "key": "refreshToken", "value": "" },
+    { "key": "addressId", "value": "" },
+    { "key": "resetToken", "value": "" },
+    { "key": "ticketId", "value": "" },
+    { "key": "userId", "value": "" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [ { "key": "token", "value": "{{accessToken}}", "type": "string" } ]
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Signup",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "if (pm.response.code === 201) {",
+              "  const b = pm.response.json();",
+              "  pm.collectionVariables.set('accessToken', b.accessToken);",
+              "  pm.collectionVariables.set('refreshToken', b.refreshToken);",
+              "  if (b.user) pm.collectionVariables.set('userId', b.user.id);",
+              "}"
+            ] } }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/api/auth/signup", "host": ["{{baseUrl}}"], "path": ["api","auth","signup"] },
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"nouvel.utilisateur@example.com\",\n  \"motDePasse\": \"Password1\",\n  \"prenom\": \"Nouvel\",\n  \"nom\": \"Utilisateur\"\n}" }
+          }
+        },
+        {
+          "name": "Signin",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "if (pm.response.code === 200) {",
+              "  const b = pm.response.json();",
+              "  pm.collectionVariables.set('accessToken', b.accessToken);",
+              "  pm.collectionVariables.set('refreshToken', b.refreshToken);",
+              "  if (b.user) pm.collectionVariables.set('userId', b.user.id);",
+              "}"
+            ] } }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/api/auth/signin", "host": ["{{baseUrl}}"], "path": ["api","auth","signin"] },
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"admin@geolink.africa\",\n  \"motDePasse\": \"Password1\"\n}" }
+          }
+        },
+        {
+          "name": "Refresh",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "if (pm.response.code === 200) {",
+              "  const b = pm.response.json();",
+              "  pm.collectionVariables.set('accessToken', b.accessToken);",
+              "  pm.collectionVariables.set('refreshToken', b.refreshToken);",
+              "}"
+            ] } }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/api/auth/refresh", "host": ["{{baseUrl}}"], "path": ["api","auth","refresh"] },
+            "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}" }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/api/auth/logout", "host": ["{{baseUrl}}"], "path": ["api","auth","logout"] },
+            "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}" }
+          }
+        },
+        {
+          "name": "Forgot password",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/api/auth/forgot-password", "host": ["{{baseUrl}}"], "path": ["api","auth","forgot-password"] },
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"aya@example.com\"\n}" }
+          }
+        },
+        {
+          "name": "Reset password",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/api/auth/reset-password", "host": ["{{baseUrl}}"], "path": ["api","auth","reset-password"] },
+            "body": { "mode": "raw", "raw": "{\n  \"token\": \"{{resetToken}}\",\n  \"nouveauMotDePasse\": \"NouveauMotDePasse1\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Get my profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/users/me", "host": ["{{baseUrl}}"], "path": ["api","users","me"] }
+          }
+        },
+        {
+          "name": "Update my profile",
+          "request": {
+            "method": "PUT",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/api/users/me", "host": ["{{baseUrl}}"], "path": ["api","users","me"] },
+            "body": { "mode": "raw", "raw": "{\n  \"prenom\": \"Aya\",\n  \"nom\": \"Ndiaye\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Addresses",
+      "item": [
+        {
+          "name": "List (paginated + filters)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/addresses?page=0&size=10&sort=createdAt,desc&ville=Douala",
+              "host": ["{{baseUrl}}"], "path": ["api","addresses"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "10" },
+                { "key": "sort", "value": "createdAt,desc" },
+                { "key": "ville", "value": "Douala" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "if (pm.response.code === 201) pm.collectionVariables.set('addressId', pm.response.json().id);"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/api/addresses", "host": ["{{baseUrl}}"], "path": ["api","addresses"] },
+            "body": { "mode": "raw", "raw": "{\n  \"pays\": \"Cameroun\",\n  \"ville\": \"Douala\",\n  \"quartier\": \"Akwa\",\n  \"rue\": \"Rue Joffre\",\n  \"numero\": \"464\",\n  \"codePostal\": null,\n  \"latitude\": 4.0483,\n  \"longitude\": 9.7043\n}" }
+          }
+        },
+        {
+          "name": "Get by id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/addresses/{{addressId}}", "host": ["{{baseUrl}}"], "path": ["api","addresses","{{addressId}}"] }
+          }
+        },
+        {
+          "name": "Update",
+          "request": {
+            "method": "PUT",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/api/addresses/{{addressId}}", "host": ["{{baseUrl}}"], "path": ["api","addresses","{{addressId}}"] },
+            "body": { "mode": "raw", "raw": "{\n  \"pays\": \"Cameroun\",\n  \"ville\": \"Douala\",\n  \"quartier\": \"Bonanjo\",\n  \"rue\": \"Boulevard de la Liberté\",\n  \"numero\": \"12\",\n  \"codePostal\": null,\n  \"latitude\": 4.0511,\n  \"longitude\": 9.6890\n}" }
+          }
+        },
+        {
+          "name": "Upload / replace photo",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/addresses/{{addressId}}/photo", "host": ["{{baseUrl}}"], "path": ["api","addresses","{{addressId}}","photo"] },
+            "body": { "mode": "formdata", "formdata": [ { "key": "file", "type": "file", "src": [] } ] }
+          }
+        },
+        {
+          "name": "Export (PDF data + QR)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/addresses/{{addressId}}/export", "host": ["{{baseUrl}}"], "path": ["api","addresses","{{addressId}}","export"] }
+          }
+        },
+        {
+          "name": "Delete",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/addresses/{{addressId}}", "host": ["{{baseUrl}}"], "path": ["api","addresses","{{addressId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Support (public)",
+      "item": [
+        {
+          "name": "Send support message",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "if (pm.response.code === 201) pm.collectionVariables.set('ticketId', pm.response.json().id);"
+            ] } }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/api/support", "host": ["{{baseUrl}}"], "path": ["api","support"] },
+            "body": { "mode": "raw", "raw": "{\n  \"nom\": \"Aya Ndiaye\",\n  \"email\": \"aya@example.com\",\n  \"message\": \"Bonjour, comment ajouter une photo ?\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin (ADMIN / SUPPORT_AGENT)",
+      "description": "Se connecter d'abord avec admin@geolink.africa (ADMIN) ou support@geolink.africa (SUPPORT_AGENT).",
+      "item": [
+        {
+          "name": "List users (ADMIN)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users?page=0&size=10&search=aya",
+              "host": ["{{baseUrl}}"], "path": ["api","admin","users"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "10" },
+                { "key": "search", "value": "aya" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List addresses (ADMIN)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/addresses?page=0&size=10&ville=Douala",
+              "host": ["{{baseUrl}}"], "path": ["api","admin","addresses"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "10" },
+                { "key": "ville", "value": "Douala" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List support tickets (ADMIN / SUPPORT_AGENT)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/support?page=0&size=10&statut=NON_TRAITE",
+              "host": ["{{baseUrl}}"], "path": ["api","admin","support"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "10" },
+                { "key": "statut", "value": "NON_TRAITE" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update support ticket status",
+          "request": {
+            "method": "PATCH",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/api/admin/support/{{ticketId}}", "host": ["{{baseUrl}}"], "path": ["api","admin","support","{{ticketId}}"] },
+            "body": { "mode": "raw", "raw": "{\n  \"statut\": \"TRAITE\"\n}" }
+          }
+        },
+        {
+          "name": "Update user role (ADMIN)",
+          "request": {
+            "method": "PATCH",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/api/admin/users/{{userId}}/role", "host": ["{{baseUrl}}"], "path": ["api","admin","users","{{userId}}","role"] },
+            "body": { "mode": "raw", "raw": "{\n  \"role\": \"SUPPORT_AGENT\"\n}" }
+          }
+        },
+        {
+          "name": "Update user status (ADMIN)",
+          "request": {
+            "method": "PATCH",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/api/admin/users/{{userId}}/status", "host": ["{{baseUrl}}"], "path": ["api","admin","users","{{userId}}","status"] },
+            "body": { "mode": "raw", "raw": "{\n  \"statut\": \"DISABLED\"\n}" }
+          }
+        }
+      ]
+    }
+  ]
+}
