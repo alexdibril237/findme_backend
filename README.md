@@ -1,7 +1,7 @@
-# findMe — Backend microservices (GeoLink Africa)
+# findMe — Backend 3-tiers (GeoLink Africa)
 
 Backend Java 21 / Spring Boot 4 du portail **findMe**, remplaçant le Mock Server du Projet 4
-sans aucune modification du frontend Nuxt 3 (seule l'URL de base de l'API change).
+sans aucune modification du frontend Nuxt 3 (l'URL de base de l'API reste `http://localhost:8080`).
 
 Projet réalisé dans le cadre du **Projet 6 — Développeur Backend Java/Spring Boot** (DHI Academy).
 Le contexte métier complet, le cahier des charges et les contraintes sont dans
@@ -11,20 +11,30 @@ MCD, matrice RBAC, stratégie de sécurité et de tests) est dans
 
 ## Architecture
 
+Application Spring Boot **unique**, en architecture **3-tiers classique**, adossée à une seule
+base PostgreSQL :
+
 ```
-Frontend Nuxt 3 → API Gateway (:8080) → auth-service (:8081)     → auth_db (PostgreSQL)
-                                       → address-service (:8082) → address_db (PostgreSQL)
-                                       → admin-service (:8083)   → admin_db (PostgreSQL)
+Frontend Nuxt 3 → findme-backend (:8080)
+                     ├── Présentation   (contrôleurs REST, DTO)
+                     ├── Métier         (services, règles métier, sécurité JWT)
+                     └── Accès données  (repositories JPA)
+                              │
+                          findme_db (PostgreSQL)
 ```
 
-- **api-gateway** : point d'entrée unique, routage par préfixe de chemin, validation JWT de premier niveau.
-- **auth-service** : comptes utilisateurs, authentification JWT (access + refresh token), RBAC.
-- **address-service** : CRUD des adresses, quota de 4 adresses/utilisateur, upload photo, export QR code.
-- **admin-service** : vues agrégées utilisateurs/adresses (appels REST vers les deux autres services), support client.
+- **presentation** : contrôleurs REST (`AuthController`, `UserController`, `AddressController`,
+  `AdminUserController`, `AdminAddressController`, `AdminSupportController`, `SupportController`),
+  DTO de requête/réponse, mappers, gestion centralisée des erreurs (`GlobalExceptionHandler`).
+- **business** : services applicatifs (`AuthService`, `UserService`, `AddressService`,
+  `SupportService`, `PhotoStorageService`, `QrCodeService`), règles métier (quota de 4
+  adresses/utilisateur, politique de mot de passe), exceptions métier.
+- **data** : entités JPA et repositories Spring Data (`UserRepository`, `AddressRepository`,
+  `SupportTicketRepository`, ...).
+- **security** : JWT (émission/validation), filtre d'authentification, configuration Spring
+  Security, CORS.
 
-Chaque microservice suit une architecture Clean/Hexagonale : `domain` (entités, règles métier
-pures) → `application` (use cases) → `infrastructure` (JPA, sécurité, clients REST) → `web`
-(contrôleurs REST, DTO). Détails complets dans le dossier de conception, section 9.
+Détails complets dans le dossier de conception, sections 1, 2 et 9.
 
 ## Prérequis
 
@@ -39,14 +49,11 @@ cp .env.example .env   # renseigner un JWT_SECRET réel (32+ caractères aléato
 docker compose up -d --build
 ```
 
-Services exposés sur l'hôte :
+Service exposé sur l'hôte :
 
 | Service | URL | Swagger UI |
 |---|---|---|
-| API Gateway (point d'entrée frontend) | http://localhost:8080 | — |
-| auth-service | http://localhost:8081 | http://localhost:8081/swagger-ui.html |
-| address-service | http://localhost:8082 | http://localhost:8082/swagger-ui.html |
-| admin-service | http://localhost:8083 | http://localhost:8083/swagger-ui.html |
+| findme-backend (point d'entrée unique) | http://localhost:8080 | http://localhost:8080/swagger-ui.html |
 
 Le frontend Nuxt 3 se branche en pointant sa variable d'environnement d'URL de base sur
 `http://localhost:8080`.
@@ -54,25 +61,31 @@ Le frontend Nuxt 3 se branche en pointant sa variable d'environnement d'URL de b
 ## Développement local (sans Docker pour le code, DB en conteneur)
 
 ```bash
-docker compose up -d auth-db address-db admin-db
-./mvnw -pl auth-service -am spring-boot:run
+docker compose up -d findme-db
+./mvnw spring-boot:run
 ```
-(remplacer `auth-service` par le module souhaité ; `DB_HOST=localhost` et `JWT_SECRET` doivent être
-exportés dans l'environnement — voir les valeurs par défaut dans chaque `application.yml`).
+(`DB_HOST=localhost` et `JWT_SECRET` doivent être exportés dans l'environnement — voir les valeurs
+par défaut dans `src/main/resources/application.yml`).
 
 ## Structure du dépôt
 
 ```
 fidme/
-├── auth-service/       # Authentification, utilisateurs, JWT, RBAC
-├── address-service/     # Adresses, quota, photos, export
-├── admin-service/        # Administration, vues agrégées, support
-├── api-gateway/            # Passerelle unique
+├── src/main/java/com/geolink/findme/
+│   ├── presentation/   # Contrôleurs REST, DTO, mappers, gestion des erreurs
+│   ├── business/         # Services, règles métier, exceptions
+│   ├── data/               # Entités JPA, repositories Spring Data
+│   ├── security/            # JWT, filtre d'authentification, config Spring Security, CORS
+│   └── config/                # OpenAPI, fichiers statiques (photos)
+├── src/main/resources/
+│   ├── application.yml
+│   └── db/migration/       # Migrations Flyway
 ├── docs/
 │   ├── conception/           # Dossier de conception complet (L2)
 │   └── frontend-api-contract.md  # Audit du contrat réel du Projet 4
 ├── docker-compose.yml
-└── pom.xml                   # POM parent multi-module
+├── Dockerfile
+└── pom.xml                   # POM unique (application mono-module)
 ```
 
 ## Tests
@@ -81,9 +94,9 @@ fidme/
 ./mvnw test
 ```
 
-Tests unitaires (JUnit 5 + Mockito) sur le domaine et les use cases, tests d'intégration
-(Testcontainers PostgreSQL) sur les endpoints critiques. Stratégie détaillée dans le dossier de
-conception, section 11.
+Tests unitaires (JUnit 5 + Mockito) sur les règles métier et les services applicatifs, tests
+d'intégration (Testcontainers PostgreSQL) sur les endpoints critiques. Stratégie détaillée dans le
+dossier de conception, section 11.
 
 ## Sécurité
 
