@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "findMe Backend — Projet 6 (GeoLink Africa)",
-    "description": "Collection prouvant l'équivalence entre le backend réel et les contrats d'API du Projet 4.\nToutes les requêtes passent par l'API Gateway ({{baseUrl}} = http://localhost:8080).\nLancer 'Auth > Signin' (ou 'Signup') d'abord : le token d'accès et le refresh token sont capturés automatiquement dans les variables de collection.",
+    "description": "Collection prouvant l'équivalence entre le backend réel et les contrats d'API du Projet 4.\nToutes les requêtes visent l'application findme-backend ({{baseUrl}} = http://localhost:8080).\nLancer 'Auth > Signin' (ou 'Signup') d'abord : le token d'accès et le refresh token sont capturés automatiquement dans les variables de collection.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [

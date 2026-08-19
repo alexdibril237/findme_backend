@@ -35,10 +35,11 @@ Trois rôles, permissions strictement différenciées, portés par la claim `rol
 - **Format** : JWT signé **HMAC-SHA384** (HS384), secret partagé injecté via `JWT_SECRET` (env).
 - **Claims** : `sub` (userId), `email`, `role`, `iat`, `exp`.
 - **Durée de vie courte** : 15 minutes (`JWT_ACCESS_TTL_MINUTES`).
-- **Émission** : uniquement par l'auth-service, à l'inscription et à la connexion.
-- **Validation** : à deux niveaux (défense en profondeur) — l'API Gateway valide en premier niveau,
-  puis **chaque microservice revalide** localement le token (signature + expiration) avant de servir
-  la requête. Un service compromis en amont ne suffit donc pas à contourner l'autorisation.
+- **Émission** : uniquement par `AuthService`, à l'inscription et à la connexion.
+- **Validation** : un seul filtre JWT (`JwtAuthenticationFilter`), appliqué une fois par requête
+  avant tout contrôleur (signature + expiration), qui alimente le `SecurityContext` consommé par
+  `@PreAuthorize` sur les endpoints admin. (Architecture antérieure : validation à deux niveaux,
+  Gateway puis microservice — devenue un seul niveau depuis la fusion en application unique.)
 - **Stateless** : `SessionCreationPolicy.STATELESS`, aucune session serveur.
 
 ### Refresh token

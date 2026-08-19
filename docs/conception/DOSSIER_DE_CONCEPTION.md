@@ -19,104 +19,120 @@ frontend réel du Projet 4).
 > `PATCH /api/admin/users/{id}/status`), sans toucher aux routes existantes — le frontend actuel
 > ne les appelle pas, donc aucun risque de régression.
 
+> **⚠️ Écart assumé par rapport au cahier des charges — architecture** : le PDF (section 2,
+> introduction ; section 2.5 ; livrable L2) impose explicitement un **découpage en 3
+> microservices autonomes** (`auth-service`, `address-service`, `admin-service`), pattern
+> *database-per-service*, et une **API Gateway** routant vers ces services (table de routage
+> détaillée en 2.5), avec communication inter-service REST synchrone pour `admin-service`
+> (section 2.3). **Ce backend a été délibérément refondu en une application 3-tiers unique**
+> (une seule base PostgreSQL, pas de Gateway ni d'appel REST inter-service) sur décision
+> explicite du porteur du projet, prise après audit du code existant — voir l'historique Git
+> pour la justification complète. Ce choix déroge donc sciemment à l'exigence structurelle du
+> PDF (microservices + Gateway), tout en respectant strictement l'exigence *fonctionnelle*
+> non négociable du même document : *« Aucune régression de contrat : chaque endpoint doit
+> produire exactement les formats attendus par le frontend »* (section 2, dernière page) — les
+> routes, DTO, codes HTTP et règles métier (quota de 4 adresses, unicité email, RBAC, etc.)
+> sont restés strictement identiques à l'implémentation microservices d'origine. Les sections
+> 1, 2, 4, 5, 7, 8 et 9 ci-dessous décrivent l'architecture 3-tiers réellement en place ; elles
+> ne décrivent donc plus le découpage microservices attendu par le PDF section 2.
+
 ---
 
 ## 1. Diagramme de contexte
+
+> **Historique** : ce projet a démarré en architecture microservices (`api-gateway` +
+> `auth-service` + `address-service` + `admin-service`, une base PostgreSQL par service). Il a été
+> refondu en une **application 3-tiers unique** (une seule base de données) pour ce livrable —
+> voir la section 2 pour l'architecture interne et la section 9 pour l'organisation des packages.
+> Le contrat d'API public (chemins, DTO, codes HTTP) est resté strictement identique : le frontend
+> n'a rien eu à changer.
 
 ```mermaid
 graph TB
     FE["Frontend findMe<br/>(Nuxt 3)"]
     B2B["Partenaires B2B<br/>(logistique, fintech, e-commerce)"]
 
-    subgraph GeoLink Backend
-        GW["API Gateway<br/>:8080"]
-        AUTH["auth-service<br/>:8081"]
-        ADDR["address-service<br/>:8082"]
-        ADMIN["admin-service<br/>:8083"]
-        AUTHDB[("auth_db<br/>PostgreSQL")]
-        ADDRDB[("address_db<br/>PostgreSQL")]
-        ADMINDB[("admin_db<br/>PostgreSQL")]
+    subgraph "GeoLink Backend"
+        APP["findme-backend<br/>:8080<br/>(Présentation → Métier → Accès données)"]
+        DB[("findme_db<br/>PostgreSQL")]
     end
 
-    FE -->|HTTPS /api/**| GW
-    B2B -->|HTTPS /api/** + OpenAPI| GW
-
-    GW -->|"/api/auth/**, /api/users/**"| AUTH
-    GW -->|"/api/addresses/**"| ADDR
-    GW -->|"/api/admin/**, /api/support"| ADMIN
-
-    ADMIN -->|"REST synchrone (RestClient)<br/>lecture agrégée"| AUTH
-    ADMIN -->|"REST synchrone (RestClient)<br/>lecture agrégée"| ADDR
-
-    AUTH --- AUTHDB
-    ADDR --- ADDRDB
-    ADMIN --- ADMINDB
+    FE -->|HTTPS /api/**| APP
+    B2B -->|HTTPS /api/** + OpenAPI| APP
+    APP --- DB
 ```
 
 **Points clés :**
-- Un seul point d'entrée public : l'API Gateway (port 8080), seul service exposé côté hôte
-  dans `docker-compose.yml`. Les 3 microservices ne sont joignables que sur le réseau Docker
-  interne — défense en profondeur en plus de la validation JWT.
-- Pattern *database-per-service* strict : aucune base n'est partagée, aucune FK inter-service
-  au niveau SQL (`address_db.addresses.user_id` est une référence logique, pas une FK physique
-  vers `auth_db.users`).
-- `admin-service` ne duplique aucune donnée métier : il interroge `auth-service` et
-  `address-service` à la demande (appels REST synchrones) pour construire ses vues agrégées.
+- Un seul point d'entrée public : l'application `findme-backend` (port 8080), seul conteneur
+  exposé côté hôte dans `docker-compose.yml`.
+- Une seule base PostgreSQL (`findme_db`) : les tables `users`, `refresh_tokens`,
+  `password_reset_tokens`, `addresses`, `support_tickets` partagent le même schéma, avec de
+  vraies contraintes de clé étrangère (`addresses.user_id → users.id`) — plus besoin de
+  référence logique inter-base comme à l'époque microservices.
+- Les vues agrégées "admin" (utilisateurs, adresses) sont construites par appel direct en mémoire
+  aux services (`UserService`, `AddressService`), sans hop réseau ni endpoint interne.
 
 ---
 
-## 2. Diagramme de composants (architecture Clean/Hexagonale)
+## 2. Diagramme de composants (architecture 3-tiers)
 
-Les 3 microservices métier partagent la même stratification en 4 couches. `api-gateway` est
-volontairement plus simple (pas de domaine métier propre : routage + sécurité transversale).
+L'application est structurée en 3 couches classiques, chacune un package racine sous
+`com.geolink.findme` :
 
 ```mermaid
 graph LR
-    subgraph "web (interfaces)"
+    subgraph "presentation (tier 1)"
         CTRL[Contrôleurs REST]
         DTO[DTO request/response]
-        MAP[Mappers DTO ↔ domaine]
+        MAP[Mappers DTO ↔ entités]
         ADVICE["@RestControllerAdvice<br/>(ProblemDetail RFC 7807)"]
     end
 
-    subgraph application
-        UC["Use cases<br/>(@Transactional)"]
-        PORTIN[Ports d'entrée]
+    subgraph "business (tier 2)"
+        SVC["Services<br/>(@Service, @Transactional)"]
+        VAL["Règles métier<br/>(quota, mot de passe...)"]
+        BEXC[Exceptions métier]
     end
 
-    subgraph domain
-        ENT["Entités & value objects<br/>règles métier pures"]
-        PORTOUT["Ports de sortie<br/>(interfaces)"]
-        DEXC[Exceptions métier]
+    subgraph "data (tier 3)"
+        ENT["Entités JPA"]
+        REPO["Repositories<br/>(Spring Data JpaRepository)"]
     end
 
-    subgraph infrastructure
-        JPA["Adaptateurs JPA<br/>(Repository impl)"]
-        SEC["Sécurité<br/>(JWT, filtres, RBAC)"]
-        CLIENT["Clients REST<br/>(inter-services)"]
-        CFG[Configuration Spring]
+    subgraph "security / config (transversal)"
+        SEC["JWT, filtres, RBAC, CORS"]
+        CFG["OpenAPI, fichiers statiques"]
     end
 
-    CTRL --> UC
+    CTRL --> SVC
     CTRL --> DTO
     CTRL --> MAP
     ADVICE -.intercepte.-> CTRL
-    UC --> ENT
-    UC --> PORTOUT
-    UC --> DEXC
-    JPA -.implémente.-> PORTOUT
-    CLIENT -.implémente.-> PORTOUT
+    SVC --> VAL
+    SVC --> BEXC
+    SVC --> REPO
+    REPO --> ENT
     SEC --> CTRL
-    CFG -.assemble via IoC.-> UC
-    CFG -.assemble via IoC.-> JPA
 ```
 
-**Règle de dépendance (inversion de dépendances, SOLID/D)** : `domain` ne dépend de rien
-(aucune annotation Spring/JPA). `application` dépend uniquement de `domain` (ports). `web` et
-`infrastructure` dépendent de `application`/`domain`, jamais l'inverse. Les adaptateurs
-(`infrastructure`) implémentent les ports définis dans `domain`, injectés par Spring IoC —
-c'est ce qui permet de tester les use cases avec des mocks Mockito sans démarrer de contexte
-Spring ni de base de données.
+**Règle de dépendance** : `presentation` dépend de `business`, jamais l'inverse. `business`
+dépend de `data` (injection directe des `JpaRepository` Spring Data, déjà des interfaces — pas
+de couche d'adaptateur intermédiaire pour la persistance). `data` ne dépend de rien d'autre que
+les entités JPA elles-mêmes. Les entités sont volontairement anémiques (porteuses de données +
+quelques prédicats simples comme `Address.belongsTo`/`sameIdentityAs`) : la logique métier vit
+dans la couche `business`, pas dans les entités ni les contrôleurs.
+
+**Respect de SOLID — principe D (inversion des dépendances)** : chaque service métier
+(`AuthService`, `UserService`, `AddressService`, `SupportService`) est défini comme une
+**interface** dans `business/service`, implémentée par une classe `*Impl` du même package
+(`AuthServiceImpl`, ...) — les contrôleurs de `presentation` dépendent de l'interface, jamais de
+l'implémentation. Les dépendances techniques remplaçables sont traitées pareil : `PhotoStorageService`
+(interface) / `FileSystemPhotoStorageService` (impl filesystem, remplaçable par un adaptateur
+S3-compatible), `QrCodeService` (interface) / `ZxingQrCodeService` (impl ZXing), et dans
+`security` : `JwtService` (interface) / `JwtServiceImpl`, `SecureTokenGenerator` (interface) /
+`SecureTokenGeneratorImpl`. Chaque interface ne porte que les méthodes réellement consommées par
+ses appelants (principe I) ; les tests unitaires mockent ces interfaces avec Mockito sans
+contexte Spring ni base de données (voir `AuthServiceTest`, `AddressServiceTest`).
 
 ---
 
@@ -318,13 +334,23 @@ classDiagram
     AddressServiceClientPort ..> AddressSummary
 ```
 
-`UserSummary`/`AddressSummary` ne sont **pas** des entités persistées : ce sont des objets de
-lecture reconstruits à chaque appel depuis les réponses REST de `auth-service`/`address-service`
-(pas de duplication de données métier, conformément à la section 2.3 du cahier des charges).
+`UserSummary`/`AddressSummary` datent de l'architecture microservices (objets reconstruits depuis
+les réponses REST d'`auth-service`/`address-service`). Depuis la fusion en application unique, les
+vues admin (`AdminUserController`, `AdminAddressController`) lisent directement les entités
+`User`/`Address` via `UserService`/`AddressService` et les mappent vers `UserProfileResponse`/
+`AddressSummaryResponse` (section 9) — toujours aucune duplication de données métier
+(conformément à la section 2.3 du cahier des charges), simplement sans le détour par un DTO client
+REST intermédiaire.
 
 ---
 
 ## 4. Diagrammes de séquence
+
+> **Note** : les diagrammes ci-dessous datent de l'architecture microservices et montraient un
+> hop `API Gateway` avant chaque service. Ce hop a disparu avec la fusion en application unique
+> (section 2) — le frontend appelle directement `findme-backend` (port 8080), qui route en
+> interne vers le contrôleur puis le service concernés. Les échanges métier eux-mêmes
+> (validations, transactions, codes HTTP) sont inchangés.
 
 ### 4.1 Inscription (signup)
 
@@ -332,28 +358,24 @@ lecture reconstruits à chaque appel depuis les réponses REST de `auth-service`
 sequenceDiagram
     actor U as Utilisateur
     participant FE as Frontend
-    participant GW as API Gateway
-    participant A as auth-service
-    participant DB as auth_db
+    participant A as findme-backend<br/>(AuthController → AuthService)
+    participant DB as findme_db
 
     U->>FE: Remplit le formulaire d'inscription
-    FE->>GW: POST /api/auth/signup {email, motDePasse, prenom, nom}
-    GW->>A: proxy (route non protégée)
+    FE->>A: POST /api/auth/signup {email, motDePasse, prenom, nom} (route non protégée)
     A->>A: Valide le DTO (Bean Validation :<br/>email, mdp ≥8 car., 1 maj., 1 chiffre)
     A->>DB: SELECT ... WHERE email = ? (via unique constraint)
     alt email déjà utilisé
         DB-->>A: contrainte uq_users_email violée
-        A-->>GW: 409 Conflict (ProblemDetail)
-        GW-->>FE: 409 Conflict
+        A-->>FE: 409 Conflict (ProblemDetail)
         FE-->>U: "Cet email est déjà utilisé"
     else email disponible
         A->>A: BCrypt.hash(motDePasse)
         A->>DB: INSERT INTO users (...)
         DB-->>A: User créé
-        A->>A: Génère access token + refresh token (JwtIssuerPort)
+        A->>A: Génère access token + refresh token (JwtService)
         A->>DB: INSERT INTO refresh_tokens (hash, expiresAt)
-        A-->>GW: 201 Created {user, accessToken, refreshToken}
-        GW-->>FE: 201 Created
+        A-->>FE: 201 Created {user, accessToken, refreshToken}
         FE-->>U: Compte créé, connecté
     end
 ```
@@ -364,17 +386,14 @@ sequenceDiagram
 sequenceDiagram
     actor U as Utilisateur
     participant FE as Frontend
-    participant GW as API Gateway
-    participant A as auth-service
-    participant DB as auth_db
+    participant A as findme-backend<br/>(AuthController → AuthService)
+    participant DB as findme_db
 
     U->>FE: Saisit email + mot de passe
-    FE->>GW: POST /api/auth/signin {email, motDePasse}
-    GW->>A: proxy (route non protégée)
+    FE->>A: POST /api/auth/signin {email, motDePasse} (route non protégée)
     A->>DB: findByEmail(email)
     alt utilisateur introuvable OU mot de passe invalide
-        A-->>GW: 401 Unauthorized {message générique}
-        GW-->>FE: 401
+        A-->>FE: 401 Unauthorized {message générique}
         Note over A: Message identique dans les deux cas :<br/>ne révèle jamais si l'email existe
     else identifiants valides ET compte ACTIVE
         A->>A: BCrypt.matches(motDePasse, hash)
@@ -382,8 +401,7 @@ sequenceDiagram
         A->>A: issueRefreshToken(user) (exp. longue, 7 j)
         A->>DB: UPDATE users SET last_login_at = now()
         A->>DB: INSERT INTO refresh_tokens (hash, expiresAt)
-        A-->>GW: 200 OK {user, accessToken, refreshToken}
-        GW-->>FE: 200 OK
+        A-->>FE: 200 OK {user, accessToken, refreshToken}
         FE->>FE: Stocke accessToken/refreshToken
     end
 ```
@@ -394,74 +412,69 @@ sequenceDiagram
 sequenceDiagram
     actor U as Utilisateur (rôle quelconque)
     participant FE as Frontend
-    participant GW as API Gateway
-    participant AD as address-service
-    participant DB as address_db
+    participant AD as findme-backend<br/>(AddressController → AddressService)
+    participant DB as findme_db
 
     U->>FE: Soumet une nouvelle adresse
-    FE->>GW: POST /api/addresses (Authorization: Bearer <access token>)
-    GW->>GW: Valide signature + expiration JWT
+    FE->>AD: POST /api/addresses (Authorization: Bearer <access token>)
+    AD->>AD: Filtre JWT : valide signature + expiration, extrait userId/rôle
     alt JWT invalide/expiré
-        GW-->>FE: 401 Unauthorized
+        AD-->>FE: 401 Unauthorized
     else JWT valide
-        GW->>AD: proxy + Authorization forwardé
-        AD->>AD: Filtre JWT local (défense en profondeur) : extrait userId, rôle
         AD->>AD: Valide le DTO (Bean Validation)
         AD->>DB: BEGIN TRANSACTION
         AD->>DB: SELECT COUNT(*) FROM addresses WHERE user_id = :id
         alt count >= 4
-            AD-->>GW: 409 Conflict "Limite de 4 adresses atteinte"
-            GW-->>FE: 409 Conflict
+            AD-->>FE: 409 Conflict "Limite de 4 adresses atteinte"
         else count < 4
             AD->>DB: SELECT ... unicité (pays/ville/quartier/rue/numéro)
             alt adresse déjà existante pour cet utilisateur
-                AD-->>GW: 409 Conflict "Adresse déjà enregistrée"
+                AD-->>FE: 409 Conflict "Adresse déjà enregistrée"
             else adresse nouvelle
                 AD->>DB: INSERT INTO addresses (...)
                 Note right of DB: Trigger trg_enforce_address_quota<br/>= filet de sécurité DB
                 DB-->>AD: Address créée
                 AD->>DB: COMMIT
-                AD-->>GW: 201 Created {address}
-                GW-->>FE: 201 Created
+                AD-->>FE: 201 Created {address}
             end
         end
     end
 ```
 
-### 4.4 Consultation admin agrégée (appel inter-services)
+### 4.4 Consultation admin agrégée
 
 ```mermaid
 sequenceDiagram
     actor A as Administrateur
     participant FE as Frontend (back-office)
-    participant GW as API Gateway
-    participant AS as admin-service
-    participant AU as auth-service
-    participant AD as address-service
+    participant CTRL as AdminUserController
+    participant SVC as UserService
+    participant DB as findme_db
 
     A->>FE: Ouvre le tableau de bord "utilisateurs"
-    FE->>GW: GET /api/admin/users?page=0&size=20 (Bearer token rôle ADMIN)
-    GW->>GW: Valide JWT (signature + expiration)
-    GW->>AS: proxy + Authorization forwardé
-    AS->>AS: @PreAuthorize("hasRole('ADMIN')")
-    AS->>AU: GET /internal/users?page=0&size=20 (RestClient, timeout 3s)
-    alt auth-service indisponible / timeout
-        AU--xAS: timeout / connexion refusée
-        AS-->>GW: 502/503 ProblemDetail "Service utilisateurs indisponible"
-        GW-->>FE: 503
-    else réponse reçue
-        AU-->>AS: 200 OK Page<UserSummary>
-        AS-->>GW: 200 OK Page<UserSummary>
-        GW-->>FE: 200 OK
-        FE-->>A: Affiche la liste paginée
-    end
+    FE->>CTRL: GET /api/admin/users?page=0&size=20 (Bearer token rôle ADMIN)
+    CTRL->>CTRL: Filtre JWT + @PreAuthorize("hasRole('ADMIN')")
+    CTRL->>SVC: listUsers(search, pageable)
+    SVC->>DB: SELECT ... FROM users (Spring Data, pagination)
+    DB-->>SVC: Page<User>
+    SVC-->>CTRL: Page<User>
+    CTRL-->>FE: 200 OK Page<UserProfileResponse>
+    FE-->>A: Affiche la liste paginée
 ```
+
+Depuis la fusion en application unique, cet appel est un simple appel de méthode en mémoire
+(`AdminUserController` → `UserService` → `UserRepository`) : le scénario d'indisponibilité réseau
+inter-service (timeout, 503) de l'ancienne architecture microservices n'a plus lieu d'être.
 
 ---
 
 ## 5. Modèle de données (MCD/MPD)
 
-### 5.1 auth_db
+Toutes les tables ci-dessous vivent dans la même base `findme_db` (migrations Flyway
+`V1`–`V9`, voir `src/main/resources/db/migration`) ; le regroupement par sous-section reflète
+uniquement le domaine fonctionnel (auth / adresses / support), pas une séparation physique.
+
+### 5.1 Domaine authentification (users, refresh_tokens, password_reset_tokens)
 
 ```mermaid
 erDiagram
@@ -498,13 +511,14 @@ erDiagram
     }
 ```
 
-### 5.2 address_db
+### 5.2 Domaine adresses (addresses)
 
 ```mermaid
 erDiagram
+    USERS ||--o{ ADDRESSES : possede
     ADDRESSES {
         uuid id PK
-        uuid user_id "référence logique vers auth_db.users.id (pas de FK physique)"
+        uuid user_id FK
         varchar country
         varchar city
         varchar district
@@ -518,10 +532,12 @@ erDiagram
         timestamptz updated_at
     }
 ```
-Contrainte `UNIQUE (user_id, country, city, district, street, house_number)` +
-trigger `trg_enforce_address_quota` (voir `V2__enforce_address_quota_trigger.sql`).
+Contrainte `UNIQUE (user_id, country, city, district, street, house_number)` + FK physique
+`user_id → users(id) ON DELETE CASCADE` (possible depuis la fusion en base unique — c'était une
+référence logique sans FK à l'époque multi-bases) + trigger `trg_enforce_address_quota` (voir
+`V5__enforce_address_quota_trigger.sql`).
 
-### 5.3 admin_db
+### 5.3 Domaine support (support_tickets)
 
 ```mermaid
 erDiagram
@@ -535,8 +551,9 @@ erDiagram
         timestamptz updated_at
     }
 ```
-`admin_db` ne contient **aucune table users/addresses** — uniquement les tickets de support,
-conformément au principe "pas de duplication de données métier".
+`support_tickets` ne duplique aucune donnée utilisateur/adresse (pas de colonne `user_id`) —
+conformément au principe "pas de duplication de données métier", conservé malgré le passage à une
+base unique.
 
 ---
 
@@ -585,7 +602,7 @@ Règles transversales :
 
 ### 7.1 Cycle de vie du token
 
-- **Émission** : uniquement par `auth-service`, à l'issue de `signin` ou `signup`. Deux tokens :
+- **Émission** : uniquement par `AuthService`, à l'issue de `signin` ou `signup`. Deux tokens :
   - **Access token** (JWT signé HMAC-SHA256, claims : `sub`=userId, `email`, `role`, `exp`) —
     durée de vie courte (15 min, configurable via `JWT_ACCESS_TTL_MINUTES`).
   - **Refresh token** (chaîne aléatoire opaque de 256 bits, `SecureRandom` — pas un JWT — dont
@@ -594,16 +611,14 @@ Règles transversales :
     l'ancien est révoqué (`revoked=true`) et un nouveau est émis, ce qui permet de détecter le
     rejeu d'un refresh token volé (s'il est présenté après avoir déjà été utilisé une fois, tous
     les tokens de l'utilisateur sont révoqués par précaution).
-- **Validation** : **défense en profondeur à deux niveaux**, justifiée par le cahier des charges
-  (section 2.4 : « validé par chaque service, ou par la Gateway, selon le choix retenu ») :
-  1. L'API Gateway valide en premier la signature et l'expiration (rejet rapide, réponse 401
-     homogène, évite de solliciter les services métier pour un token manifestement invalide).
-  2. Chaque microservice **revalide indépendamment** le même JWT (même secret partagé via la
-     variable d'environnement `JWT_SECRET`) avant d'appliquer son propre `@PreAuthorize`. Ce choix
-     évite de faire aveuglément confiance au réseau interne Docker (principe *zero trust* même en
-     interne) sans nécessiter de bibliothèque partagée versionnée entre services (chaque service
-     reste déployable indépendamment — on accepte une petite duplication de code de validation JWT
-     au profit de l'indépendance des microservices).
+- **Validation** : conforme au cahier des charges (section 2.4 : « validé par chaque service, ou
+  par la Gateway, selon le choix retenu »). Dans l'architecture microservices d'origine, la
+  validation se faisait en deux temps (Gateway puis service). Depuis la fusion en application
+  unique (section 2), il n'y a plus qu'**un seul filtre JWT** (`JwtAuthenticationFilter`),
+  appliqué une fois par requête avant tout contrôleur : il valide la signature et l'expiration,
+  extrait `userId`/`email`/`role`, et alimente le `SecurityContext` consommé ensuite par
+  `@PreAuthorize` sur les contrôleurs admin. La duplication de validation propre au découpage
+  microservices n'a plus lieu d'être dans un seul process.
 - **Révocation** : `logout` révoque le refresh token courant. `POST /api/admin/users/{id}/status`
   (désactivation de compte) invalide implicitement toute nouvelle tentative de refresh (vérification
   `status == ACTIVE` à chaque `refresh`/`signin`), même si un access token de courte durée reste
@@ -615,11 +630,12 @@ Règles transversales :
 
 ### 7.2 Protection des endpoints
 
-- `SecurityFilterChain` par service : tout endpoint est protégé par défaut (`anyRequest().authenticated()`),
-  seules les routes listées en section 6 comme 🌐 sont explicitement `permitAll()`.
+- Une seule `SecurityFilterChain` pour toute l'application : tout endpoint est protégé par défaut
+  (`anyRequest().authenticated()`), seules les routes listées en section 6 comme 🌐 sont
+  explicitement `permitAll()`.
 - `@PreAuthorize("hasRole('ADMIN')")` / `hasAnyRole('ADMIN','SUPPORT_AGENT')` au niveau méthode
-  des contrôleurs `admin-service`, en plus du filtrage par la Gateway sur le préfixe `/api/admin/**`.
-- Vérification de propriété (adresses) : effectuée dans la couche `application` (use case), pas
+  des contrôleurs admin (`AdminUserController`, `AdminAddressController`, `AdminSupportController`).
+- Vérification de propriété (adresses) : effectuée dans la couche `business` (`AddressService`), pas
   dans le contrôleur — c'est une règle métier, pas un détail HTTP.
 
 ### 7.3 Hashing & secrets
@@ -646,12 +662,12 @@ Règles transversales :
   `trg_enforce_address_quota`, section 5.2) qui absorbe le cas limite d'une double requête
   concurrente sur le même compte (la transaction perdante échoue proprement avec une exception
   applicative traduite en `409 Conflict`, plutôt que de produire une 5ᵉ adresse).
-- **Erreurs partielles (admin-service)** : les appels REST vers `auth-service`/`address-service`
-  ne sont **jamais** inclus dans une transaction locale (ce sont des lectures, pas des écritures
-  distribuées — pas de need de saga/2PC). En cas d'échec/timeout d'un service appelé, `admin-service`
-  retourne une erreur `503 Service Unavailable` avec un `ProblemDetail` explicite, sans jamais
-  planter (`RestClient` configuré avec un timeout de connexion et de lecture de 3s, capturé par un
-  `try/catch` dédié dans l'adaptateur `infrastructure/client`).
+- **Vues agrégées admin** : dans l'ancienne architecture microservices, `admin-service`
+  interrogeait `auth-service`/`address-service` par REST synchrone et devait gérer les échecs
+  réseau (`503 Service Unavailable`, timeout 3s). Depuis la fusion en application unique, les
+  contrôleurs admin (`AdminUserController`, `AdminAddressController`) appellent directement
+  `UserService`/`AddressService` en mémoire : plus d'appel réseau, donc plus de scénario
+  d'indisponibilité partielle à gérer pour ces vues.
 - **Rollback** : toute exception métier non contrôlée (`RuntimeException`) déclenche un rollback
   automatique Spring ; les exceptions métier attendues (ex. `EmailAlreadyUsedException`,
   `AddressQuotaExceededException`) sont volontairement des `RuntimeException` pour bénéficier de ce
@@ -661,39 +677,46 @@ Règles transversales :
 
 ## 9. Organisation des packages (arborescence type)
 
-Identique pour `auth-service`, `address-service`, `admin-service` (illustration avec `auth-service`) :
+Application unique, package racine `com.geolink.findme`, structurée par tier (Présentation →
+Métier → Accès données), plus deux packages transversaux (`security`, `config`) :
 
 ```
-auth-service/
-└── src/main/java/com/geolink/findme/auth/
-    ├── AuthServiceApplication.java
-    ├── domain/
-    │   ├── model/            # User, Email, Role, AccountStatus, RefreshToken, PasswordResetToken
-    │   ├── port/              # UserRepositoryPort, RefreshTokenRepositoryPort, PasswordHasherPort, JwtIssuerPort
-    │   └── exception/         # EmailAlreadyUsedException, InvalidCredentialsException, ...
-    ├── application/
-    │   └── usecase/           # SignupUseCase, SigninUseCase, RefreshTokenUseCase, LogoutUseCase,
-    │                           # ForgotPasswordUseCase, ResetPasswordUseCase, GetMyProfileUseCase, UpdateMyProfileUseCase
-    ├── infrastructure/
-    │   ├── persistence/        # UserJpaEntity, UserJpaRepository, UserRepositoryAdapter, ...
-    │   ├── security/            # JwtService (impl JwtIssuerPort), JwtAuthenticationFilter, SecurityConfig
-    │   └── config/               # OpenApiConfig, BeanConfig (PasswordEncoder, RestClient si besoin)
-    └── web/
-        ├── controller/          # AuthController, UserController
-        ├── dto/                 # SignupRequest, SigninRequest, AuthResponse, UserProfileResponse, ...
-        ├── mapper/              # UserWebMapper
-        └── advice/               # GlobalExceptionHandler (ProblemDetail)
+src/main/java/com/geolink/findme/
+├── FindmeApplication.java
+├── presentation/
+│   ├── controller/   # AuthController, UserController, AddressController,
+│   │                  AdminUserController, AdminAddressController, AdminSupportController,
+│   │                  SupportController
+│   ├── dto/           # SignupRequest, AuthResponse, AddressRequest, AddressResponse,
+│   │                    SupportTicketResponse, ...
+│   ├── mapper/         # UserWebMapper, AddressWebMapper, SupportWebMapper
+│   └── advice/         # GlobalExceptionHandler (ProblemDetail RFC 7807, un seul pour toute l'app)
+├── business/
+│   ├── service/        # AuthService/AuthServiceImpl, UserService/UserServiceImpl,
+│   │                     AddressService/AddressServiceImpl, SupportService/SupportServiceImpl,
+│   │                     PhotoStorageService/FileSystemPhotoStorageService,
+│   │                     QrCodeService/ZxingQrCodeService
+│   │                     (chaque dépendance métier ou technique remplaçable = interface +
+│   │                      implémentation `*Impl`, cf. section 2 "Respect de SOLID")
+│   ├── validation/      # EmailPolicy, PasswordPolicy, AddressQuotaPolicy, GeoPointPolicy
+│   │                     (helpers statiques, règles métier pures)
+│   └── exception/       # EmailAlreadyUsedException, AddressQuotaExceededException, ...
+├── data/
+│   ├── entity/          # User, RefreshToken, PasswordResetToken, Address, SupportTicket
+│   │                     (entités JPA anémiques : @Enumerated(STRING), pas de comportement métier)
+│   └── repository/      # UserRepository, RefreshTokenRepository, AddressRepository, ...
+│                         (interfaces Spring Data JpaRepository)
+├── security/            # JwtService/JwtServiceImpl, JwtAuthenticationFilter, SecurityConfig,
+│                          CorsConfig, CurrentUserProvider, RestAuthenticationEntryPoint,
+│                          RestAccessDeniedHandler, SecureTokenGenerator/SecureTokenGeneratorImpl
+└── config/               # OpenApiConfig, StaticFilesConfig (sert /files/** pour les photos)
 ```
 
-`api-gateway` (structure allégée, pas de couche domaine métier) :
-```
-api-gateway/
-└── src/main/java/com/geolink/findme/gateway/
-    ├── ApiGatewayApplication.java
-    ├── config/        # RouteProperties (mapping préfixe → base URL), RestClientConfig
-    ├── security/      # GatewayJwtFilter (validation signature/expiration avant proxy)
-    └── web/           # ProxyController (routage générique par préfixe de chemin)
-```
+**Règle de dépendance** (voir section 2) : `presentation` → `business` → `data`, jamais l'inverse.
+Contrairement à l'ancienne architecture hexagonale (une couche `domain`/`application`/
+`infrastructure`/`web` par microservice avec interfaces "ports"), la couche `business` injecte
+directement les `JpaRepository` Spring Data — pas de couche d'abstraction supplémentaire, ce qui
+correspond au modèle 3-tiers classique demandé pour ce livrable.
 
 ---
 
