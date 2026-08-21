@@ -9,7 +9,8 @@ import java.util.UUID;
 
 public interface SupportService {
 
-    SupportTicket createTicket(String name, String email, String message);
+    /** {@code userId} est {@code null} si le ticket est soumis sans compte connecte. */
+    SupportTicket createTicket(String name, String email, String message, UUID userId);
 
     Page<SupportTicket> listTickets(Pageable pageable, TicketStatus statusFilter);
 

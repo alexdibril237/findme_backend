@@ -9,6 +9,6 @@ public class SupportWebMapper {
 
     public SupportTicketResponse toResponse(SupportTicket ticket) {
         return new SupportTicketResponse(ticket.getId(), ticket.getName(), ticket.getEmail(), ticket.getMessage(),
-                ticket.getStatus().name(), ticket.getCreatedAt(), ticket.getUpdatedAt());
+                ticket.getUserId(), ticket.getStatus().name(), ticket.getCreatedAt(), ticket.getUpdatedAt());
     }
 }
