@@ -10,6 +10,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.Map;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -36,6 +37,51 @@ class SupportAndRbacIT extends AbstractIntegrationTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").isNotEmpty())
                 .andExpect(jsonPath("$.email").value("awa@example.com"));
+    }
+
+    @Test
+    void ticket_soumis_anonyme_n_a_pas_de_userId() throws Exception {
+        String body = objectMapper.writeValueAsString(Map.of(
+                "nom", "Anonyme", "email", "anon@example.com", "message", "Question sans compte."));
+        mockMvc.perform(post("/api/support").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.userId").doesNotExist());
+    }
+
+    @Test
+    void ticket_soumis_connecte_est_relie_au_compte_et_notifie_a_la_resolution() throws Exception {
+        // Inscription réelle (pas bearer() forgé) : support_tickets.user_id référence users(id).
+        var signup = mockMvc.perform(post("/api/auth/signup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "email", "ticket.notif@geolink.africa", "motDePasse", "Password1",
+                                "prenom", "Awa", "nom", "Ndiaye"))))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String userToken = objectMapper.readTree(signup.getResponse().getContentAsString())
+                .get("accessToken").asText();
+
+        var ticket = mockMvc.perform(post("/api/support")
+                        .header("Authorization", "Bearer " + userToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "nom", "Awa Ndiaye", "email", "ticket.notif@geolink.africa",
+                                "message", "Mon adresse ne se vérifie pas."))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.userId").isNotEmpty())
+                .andReturn();
+        String ticketId = objectMapper.readTree(ticket.getResponse().getContentAsString()).get("id").asText();
+
+        mockMvc.perform(patch("/api/admin/support/" + ticketId)
+                        .header("Authorization", bearer("ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("statut", "TRAITE"))))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/messages").header("Authorization", "Bearer " + userToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].sujet").value("Votre demande a été traitée"))
+                .andExpect(jsonPath("$.content[0].lu").value(false));
     }
 
     @Test
