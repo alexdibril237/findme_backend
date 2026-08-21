@@ -27,6 +27,9 @@ public class SupportTicket {
     @Column(nullable = false)
     private String message;
 
+    @Column(name = "user_id")
+    private UUID userId;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private TicketStatus status;
@@ -70,6 +73,14 @@ public class SupportTicket {
 
     public void setMessage(String message) {
         this.message = message;
+    }
+
+    public UUID getUserId() {
+        return userId;
+    }
+
+    public void setUserId(UUID userId) {
+        this.userId = userId;
     }
 
     public TicketStatus getStatus() {

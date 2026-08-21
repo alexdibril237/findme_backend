@@ -8,6 +8,7 @@ public record SupportTicketResponse(
         String nom,
         String email,
         String message,
+        UUID userId,
         String statut,
         Instant dateCreation,
         Instant dateModification
