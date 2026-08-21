@@ -54,9 +54,9 @@ public class AddressController {
 
     @PostMapping
     public ResponseEntity<AddressResponse> create(@Valid @RequestBody AddressRequest request) {
-        var address = addressService.createAddress(currentUserProvider.requireCurrentUserId(), request.pays(),
-                request.ville(), request.quartier(), request.rue(), request.numero(), request.codePostal(),
-                request.latitude(), request.longitude());
+        var address = addressService.createAddress(currentUserProvider.requireCurrentUserId(), request.label(),
+                request.pays(), request.ville(), request.quartier(), request.rue(), request.numero(),
+                request.codePostal(), request.latitude(), request.longitude(), request.countryCode());
         return ResponseEntity.status(HttpStatus.CREATED).body(mapper.toResponse(address));
     }
 
@@ -68,9 +68,9 @@ public class AddressController {
 
     @PutMapping("/{id}")
     public AddressResponse update(@PathVariable UUID id, @Valid @RequestBody AddressRequest request) {
-        var address = addressService.updateAddress(id, currentUserProvider.requireCurrentUserId(), request.pays(),
-                request.ville(), request.quartier(), request.rue(), request.numero(), request.codePostal(),
-                request.latitude(), request.longitude());
+        var address = addressService.updateAddress(id, currentUserProvider.requireCurrentUserId(), request.label(),
+                request.pays(), request.ville(), request.quartier(), request.rue(), request.numero(),
+                request.codePostal(), request.latitude(), request.longitude(), request.countryCode());
         return mapper.toResponse(address);
     }
 

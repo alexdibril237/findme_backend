@@ -72,8 +72,8 @@ class AddressServiceTest {
                 .thenReturn(false);
         when(addressRepository.save(any(Address.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Address created = addressService.createAddress(userId, "Cameroun", "Douala", "Akwa", "Rue 1", "12",
-                "0000", 4.05, 9.7);
+        Address created = addressService.createAddress(userId, "Domicile", "Cameroun", "Douala", "Akwa", "Rue 1", "12",
+                "0000", 4.05, 9.7, "CM");
 
         assertThat(created.getCity()).isEqualTo("Douala");
         assertThat(created.getUserId()).isEqualTo(userId);
@@ -84,8 +84,8 @@ class AddressServiceTest {
     void refuse_quand_quota_atteint() {
         when(addressRepository.countByUserId(userId)).thenReturn((long) AddressQuotaPolicy.MAX_ADDRESSES_PER_USER);
 
-        assertThatThrownBy(() -> addressService.createAddress(userId, "Cameroun", "Douala", "Akwa", "Rue 1", "12",
-                "0000", 4.05, 9.7))
+        assertThatThrownBy(() -> addressService.createAddress(userId, "Domicile", "Cameroun", "Douala", "Akwa", "Rue 1",
+                "12", "0000", 4.05, 9.7, "CM"))
                 .isInstanceOf(AddressQuotaExceededException.class);
 
         verify(addressRepository, never()).save(any());
@@ -99,8 +99,8 @@ class AddressServiceTest {
                         eq(userId), anyString(), anyString(), anyString(), anyString(), anyString()))
                 .thenReturn(true);
 
-        assertThatThrownBy(() -> addressService.createAddress(userId, "Cameroun", "Douala", "Akwa", "Rue 1", "12",
-                "0000", 4.05, 9.7))
+        assertThatThrownBy(() -> addressService.createAddress(userId, "Domicile", "Cameroun", "Douala", "Akwa", "Rue 1",
+                "12", "0000", 4.05, 9.7, "CM"))
                 .isInstanceOf(DuplicateAddressException.class);
 
         verify(addressRepository, never()).save(any());
@@ -150,8 +150,8 @@ class AddressServiceTest {
                 .thenReturn(false);
         when(addressRepository.save(any(Address.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Address result = addressService.updateAddress(address.getId(), owner, "Cameroun", "Yaoundé", "Bastos",
-                "Rue 5", "20", "1111", 3.87, 11.5);
+        Address result = addressService.updateAddress(address.getId(), owner, "Bureau", "Cameroun", "Yaoundé", "Bastos",
+                "Rue 5", "20", "1111", 3.87, 11.5, "CM");
 
         assertThat(result.getCity()).isEqualTo("Yaoundé");
         assertThat(result.getDistrict()).isEqualTo("Bastos");
@@ -162,8 +162,8 @@ class AddressServiceTest {
         UUID id = UUID.randomUUID();
         when(addressRepository.findById(id)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> addressService.updateAddress(id, UUID.randomUUID(), "Cameroun", "Yaoundé", "Bastos",
-                "Rue 5", "20", "1111", 3.87, 11.5))
+        assertThatThrownBy(() -> addressService.updateAddress(id, UUID.randomUUID(), "Bureau", "Cameroun", "Yaoundé",
+                "Bastos", "Rue 5", "20", "1111", 3.87, 11.5, "CM"))
                 .isInstanceOf(AddressNotFoundException.class);
     }
 
@@ -172,8 +172,8 @@ class AddressServiceTest {
         Address address = existing(UUID.randomUUID());
         when(addressRepository.findById(address.getId())).thenReturn(Optional.of(address));
 
-        assertThatThrownBy(() -> addressService.updateAddress(address.getId(), UUID.randomUUID(), "Cameroun",
-                "Yaoundé", "Bastos", "Rue 5", "20", "1111", 3.87, 11.5))
+        assertThatThrownBy(() -> addressService.updateAddress(address.getId(), UUID.randomUUID(), "Bureau", "Cameroun",
+                "Yaoundé", "Bastos", "Rue 5", "20", "1111", 3.87, 11.5, "CM"))
                 .isInstanceOf(AddressAccessDeniedException.class);
 
         verify(addressRepository, never()).save(any());
@@ -189,8 +189,8 @@ class AddressServiceTest {
                         eq(owner), anyString(), anyString(), anyString(), anyString(), anyString()))
                 .thenReturn(true);
 
-        assertThatThrownBy(() -> addressService.updateAddress(address.getId(), owner, "Cameroun", "Yaoundé",
-                "Bastos", "Rue 5", "20", "1111", 3.87, 11.5))
+        assertThatThrownBy(() -> addressService.updateAddress(address.getId(), owner, "Bureau", "Cameroun", "Yaoundé",
+                "Bastos", "Rue 5", "20", "1111", 3.87, 11.5, "CM"))
                 .isInstanceOf(DuplicateAddressException.class);
 
         verify(addressRepository, never()).save(any());

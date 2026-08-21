@@ -3,6 +3,7 @@ package com.geolink.findme.business.service;
 import com.geolink.findme.business.exception.AddressAccessDeniedException;
 import com.geolink.findme.business.exception.AddressNotFoundException;
 import com.geolink.findme.business.exception.DuplicateAddressException;
+import com.geolink.findme.business.model.AddressStatus;
 import com.geolink.findme.business.validation.AddressQuotaPolicy;
 import com.geolink.findme.business.validation.GeoPointPolicy;
 import com.geolink.findme.data.entity.Address;
@@ -14,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 
 @Service
 public class AddressServiceImpl implements AddressService {
@@ -37,8 +39,9 @@ public class AddressServiceImpl implements AddressService {
 
     @Override
     @Transactional
-    public Address createAddress(UUID userId, String country, String city, String district, String street,
-                                  String houseNumber, String postalCode, Double latitude, Double longitude) {
+    public Address createAddress(UUID userId, String label, String country, String city, String district,
+                                  String street, String houseNumber, String postalCode, Double latitude,
+                                  Double longitude, String countryCode) {
         AddressQuotaPolicy.ensureCanCreate(addressRepository.countByUserId(userId));
 
         if (addressRepository
@@ -52,6 +55,7 @@ public class AddressServiceImpl implements AddressService {
         Address address = new Address();
         address.setId(UUID.randomUUID());
         address.setUserId(userId);
+        address.setLabel(label);
         address.setCountry(country);
         address.setCity(city);
         address.setDistrict(district);
@@ -60,10 +64,28 @@ public class AddressServiceImpl implements AddressService {
         address.setPostalCode(postalCode);
         address.setLatitude(latitude);
         address.setLongitude(longitude);
+        address.setCountryCode(countryCode);
+        address.setStatus(AddressStatus.PENDING);
+        address.setAddressCode(generateAddressCode(district));
         address.setCreatedAt(now);
         address.setUpdatedAt(now);
 
         return addressRepository.save(address);
+    }
+
+    // Code court affiché sur le certificat PDF et sur le QR "voisin". Le préfixe reprend le
+    // quartier pour rester lisible/mémorisable ; on retire tout suffixe numérique jusqu'à
+    // trouver une combinaison libre (collision très improbable vu l'espace à 4 chiffres).
+    private String generateAddressCode(String district) {
+        String base = (district == null || district.isBlank()) ? "ADDR" : district.trim().toUpperCase();
+        String prefix = base.length() > 4 ? base.substring(0, 4) : base;
+        for (int attempt = 0; attempt < 10; attempt++) {
+            String candidate = "FM-" + prefix + "-" + String.format("%04d", ThreadLocalRandom.current().nextInt(10000));
+            if (!addressRepository.existsByAddressCode(candidate)) {
+                return candidate;
+            }
+        }
+        throw new IllegalStateException("Impossible de générer un code d'adresse unique");
     }
 
     @Override
@@ -74,8 +96,9 @@ public class AddressServiceImpl implements AddressService {
 
     @Override
     @Transactional
-    public Address updateAddress(UUID addressId, UUID requesterId, String country, String city, String district,
-                                  String street, String houseNumber, String postalCode, Double latitude, Double longitude) {
+    public Address updateAddress(UUID addressId, UUID requesterId, String label, String country, String city,
+                                  String district, String street, String houseNumber, String postalCode,
+                                  Double latitude, Double longitude, String countryCode) {
         Address address = findOwned(addressId, requesterId);
 
         boolean identityChanged = !address.sameIdentityAs(country, city, district, street, houseNumber);
@@ -86,6 +109,7 @@ public class AddressServiceImpl implements AddressService {
         }
         GeoPointPolicy.validate(latitude, longitude);
 
+        address.setLabel(label);
         address.setCountry(country);
         address.setCity(city);
         address.setDistrict(district);
@@ -94,6 +118,9 @@ public class AddressServiceImpl implements AddressService {
         address.setPostalCode(postalCode);
         address.setLatitude(latitude);
         address.setLongitude(longitude);
+        if (countryCode != null) {
+            address.setCountryCode(countryCode);
+        }
         address.setUpdatedAt(Instant.now());
 
         return addressRepository.save(address);

@@ -10,6 +10,8 @@ import com.geolink.findme.business.exception.InvalidCredentialsException;
 import com.geolink.findme.business.exception.InvalidOrExpiredTokenException;
 import com.geolink.findme.business.exception.InvalidPhotoException;
 import com.geolink.findme.business.exception.SupportTicketNotFoundException;
+import com.geolink.findme.business.exception.UserMessageAccessDeniedException;
+import com.geolink.findme.business.exception.UserMessageNotFoundException;
 import com.geolink.findme.business.exception.UserNotFoundException;
 import com.geolink.findme.business.exception.WeakPasswordException;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -80,6 +82,16 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(SupportTicketNotFoundException.class)
     public ProblemDetail handleSupportTicketNotFound(SupportTicketNotFoundException e) {
         return problem(HttpStatus.NOT_FOUND, e.getMessage(), "SUPPORT_TICKET_NOT_FOUND");
+    }
+
+    @ExceptionHandler(UserMessageNotFoundException.class)
+    public ProblemDetail handleUserMessageNotFound(UserMessageNotFoundException e) {
+        return problem(HttpStatus.NOT_FOUND, e.getMessage(), "MESSAGE_NOT_FOUND");
+    }
+
+    @ExceptionHandler(UserMessageAccessDeniedException.class)
+    public ProblemDetail handleUserMessageAccessDenied(UserMessageAccessDeniedException e) {
+        return problem(HttpStatus.FORBIDDEN, e.getMessage(), "MESSAGE_ACCESS_DENIED");
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

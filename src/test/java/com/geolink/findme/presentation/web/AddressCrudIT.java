@@ -31,7 +31,7 @@ class AddressCrudIT extends AbstractIntegrationTest {
 
     private String addressBody(String numero) throws Exception {
         return objectMapper.writeValueAsString(Map.of(
-                "pays", "Cameroun", "ville", "Douala", "quartier", "Akwa",
+                "label", "Domicile", "pays", "Cameroun", "ville", "Douala", "quartier", "Akwa",
                 "rue", "Rue Joffre", "numero", numero, "latitude", 4.05, "longitude", 9.7));
     }
 

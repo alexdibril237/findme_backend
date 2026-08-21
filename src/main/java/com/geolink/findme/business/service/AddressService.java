@@ -10,13 +10,14 @@ public interface AddressService {
 
     Page<Address> listMyAddresses(UUID userId, Pageable pageable, String country, String city, String district);
 
-    Address createAddress(UUID userId, String country, String city, String district, String street,
-                           String houseNumber, String postalCode, Double latitude, Double longitude);
+    Address createAddress(UUID userId, String label, String country, String city, String district, String street,
+                           String houseNumber, String postalCode, Double latitude, Double longitude, String countryCode);
 
     Address getAddress(UUID addressId, UUID requesterId);
 
-    Address updateAddress(UUID addressId, UUID requesterId, String country, String city, String district,
-                           String street, String houseNumber, String postalCode, Double latitude, Double longitude);
+    Address updateAddress(UUID addressId, UUID requesterId, String label, String country, String city, String district,
+                           String street, String houseNumber, String postalCode, Double latitude, Double longitude,
+                           String countryCode);
 
     void deleteAddress(UUID addressId, UUID requesterId);
 
