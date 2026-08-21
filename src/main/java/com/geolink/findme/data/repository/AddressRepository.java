@@ -13,6 +13,8 @@ public interface AddressRepository extends JpaRepository<Address, UUID> {
 
     long countByUserId(UUID userId);
 
+    boolean existsByAddressCode(String addressCode);
+
     boolean existsByUserIdAndCountryIgnoreCaseAndCityIgnoreCaseAndDistrictIgnoreCaseAndStreetIgnoreCaseAndHouseNumberIgnoreCase(
             UUID userId, String country, String city, String district, String street, String houseNumber);
 

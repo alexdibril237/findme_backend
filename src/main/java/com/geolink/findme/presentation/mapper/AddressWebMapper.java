@@ -14,6 +14,7 @@ public class AddressWebMapper {
         return new AddressResponse(
                 address.getId(),
                 address.getUserId(),
+                address.getLabel(),
                 address.getCountry(),
                 address.getCity(),
                 address.getDistrict(),
@@ -23,6 +24,9 @@ public class AddressWebMapper {
                 address.getLatitude(),
                 address.getLongitude(),
                 address.getPhotoUrl(),
+                address.getStatus(),
+                address.getAddressCode(),
+                address.getCountryCode(),
                 address.getCreatedAt(),
                 address.getUpdatedAt()
         );
@@ -32,6 +36,7 @@ public class AddressWebMapper {
         return new AddressSummaryResponse(
                 address.getId(),
                 address.getUserId(),
+                address.getLabel(),
                 address.getCountry(),
                 address.getCity(),
                 address.getDistrict(),

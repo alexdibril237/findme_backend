@@ -1,7 +1,10 @@
 package com.geolink.findme.data.entity;
 
+import com.geolink.findme.business.model.AddressStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
@@ -42,6 +45,19 @@ public class Address {
 
     @Column(name = "photo_url")
     private String photoUrl;
+
+    @Column(nullable = false)
+    private String label;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private AddressStatus status;
+
+    @Column(name = "address_code", nullable = false, unique = true)
+    private String addressCode;
+
+    @Column(name = "country_code")
+    private String countryCode;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
@@ -138,6 +154,38 @@ public class Address {
 
     public void setPhotoUrl(String photoUrl) {
         this.photoUrl = photoUrl;
+    }
+
+    public String getLabel() {
+        return label;
+    }
+
+    public void setLabel(String label) {
+        this.label = label;
+    }
+
+    public AddressStatus getStatus() {
+        return status;
+    }
+
+    public void setStatus(AddressStatus status) {
+        this.status = status;
+    }
+
+    public String getAddressCode() {
+        return addressCode;
+    }
+
+    public void setAddressCode(String addressCode) {
+        this.addressCode = addressCode;
+    }
+
+    public String getCountryCode() {
+        return countryCode;
+    }
+
+    public void setCountryCode(String countryCode) {
+        this.countryCode = countryCode;
     }
 
     public Instant getCreatedAt() {

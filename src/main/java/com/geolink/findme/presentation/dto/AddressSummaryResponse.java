@@ -6,6 +6,7 @@ import java.util.UUID;
 public record AddressSummaryResponse(
         UUID id,
         UUID userId,
+        String label,
         String pays,
         String ville,
         String quartier,
