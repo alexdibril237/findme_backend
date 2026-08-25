@@ -1,7 +1,7 @@
 package com.geolink.findme.presentation.web;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.geolink.findme.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,11 +35,27 @@ class AddressCrudIT extends AbstractIntegrationTest {
                 "rue", "Rue Joffre", "numero", numero, "latitude", 4.05, "longitude", 9.7));
     }
 
+    // addresses.user_id référence users(id) : un bearer() forgé (UUID non persisté) échoue avec une
+    // violation de contrainte FK dès qu'on crée réellement une adresse. Il faut donc une inscription
+    // réelle pour tout scénario qui écrit en base ; bearer() reste valable pour les lectures seules.
+    private String signupToken() throws Exception {
+        String email = "user-" + UUID.randomUUID() + "@geolink.africa";
+        var result = mockMvc.perform(post("/api/auth/signup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "email", email, "motDePasse", "Password1",
+                                "prenom", "Test", "nom", "User"))))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String accessToken = objectMapper.readTree(result.getResponse().getContentAsString())
+                .get("accessToken").asText();
+        return "Bearer " + accessToken;
+    }
+
     @Test
     void creation_adresse_retourne_201() throws Exception {
-        UUID user = UUID.randomUUID();
         mockMvc.perform(post("/api/addresses")
-                        .header("Authorization", bearer(user, "USER"))
+                        .header("Authorization", signupToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(addressBody("100")))
                 .andExpect(status().isCreated())
@@ -49,16 +65,16 @@ class AddressCrudIT extends AbstractIntegrationTest {
 
     @Test
     void liste_ne_renvoie_que_les_adresses_du_proprietaire() throws Exception {
-        UUID user = UUID.randomUUID();
-        mockMvc.perform(post("/api/addresses").header("Authorization", bearer(user, "USER"))
+        String ownerToken = signupToken();
+        mockMvc.perform(post("/api/addresses").header("Authorization", ownerToken)
                         .contentType(MediaType.APPLICATION_JSON).content(addressBody("200")))
                 .andExpect(status().isCreated());
 
-        mockMvc.perform(get("/api/addresses").header("Authorization", bearer(user, "USER")))
+        mockMvc.perform(get("/api/addresses").header("Authorization", ownerToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(1));
 
-        // Un autre utilisateur ne voit aucune adresse.
+        // Un autre utilisateur ne voit aucune adresse (lecture seule : bearer() forgé suffit).
         mockMvc.perform(get("/api/addresses").header("Authorization", bearer(UUID.randomUUID(), "USER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(0));
@@ -66,13 +82,13 @@ class AddressCrudIT extends AbstractIntegrationTest {
 
     @Test
     void cinquieme_adresse_retourne_409_quota_depasse() throws Exception {
-        UUID user = UUID.randomUUID();
+        String ownerToken = signupToken();
         for (int i = 1; i <= 4; i++) {
-            mockMvc.perform(post("/api/addresses").header("Authorization", bearer(user, "USER"))
+            mockMvc.perform(post("/api/addresses").header("Authorization", ownerToken)
                             .contentType(MediaType.APPLICATION_JSON).content(addressBody("30" + i)))
                     .andExpect(status().isCreated());
         }
-        mockMvc.perform(post("/api/addresses").header("Authorization", bearer(user, "USER"))
+        mockMvc.perform(post("/api/addresses").header("Authorization", ownerToken)
                         .contentType(MediaType.APPLICATION_JSON).content(addressBody("305")))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.errorCode").value("ADDRESS_QUOTA_EXCEEDED"));
@@ -80,8 +96,7 @@ class AddressCrudIT extends AbstractIntegrationTest {
 
     @Test
     void acces_a_l_adresse_d_un_autre_utilisateur_retourne_403() throws Exception {
-        UUID owner = UUID.randomUUID();
-        var result = mockMvc.perform(post("/api/addresses").header("Authorization", bearer(owner, "USER"))
+        var result = mockMvc.perform(post("/api/addresses").header("Authorization", signupToken())
                         .contentType(MediaType.APPLICATION_JSON).content(addressBody("400")))
                 .andExpect(status().isCreated())
                 .andReturn();
