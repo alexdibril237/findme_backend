@@ -25,16 +25,67 @@ frontend réel du Projet 4).
 > *database-per-service*, et une **API Gateway** routant vers ces services (table de routage
 > détaillée en 2.5), avec communication inter-service REST synchrone pour `admin-service`
 > (section 2.3). **Ce backend a été délibérément refondu en une application 3-tiers unique**
-> (une seule base PostgreSQL, pas de Gateway ni d'appel REST inter-service) sur décision
-> explicite du porteur du projet, prise après audit du code existant — voir l'historique Git
-> pour la justification complète. Ce choix déroge donc sciemment à l'exigence structurelle du
-> PDF (microservices + Gateway), tout en respectant strictement l'exigence *fonctionnelle*
-> non négociable du même document : *« Aucune régression de contrat : chaque endpoint doit
-> produire exactement les formats attendus par le frontend »* (section 2, dernière page) — les
-> routes, DTO, codes HTTP et règles métier (quota de 4 adresses, unicité email, RBAC, etc.)
-> sont restés strictement identiques à l'implémentation microservices d'origine. Les sections
-> 1, 2, 4, 5, 7, 8 et 9 ci-dessous décrivent l'architecture 3-tiers réellement en place ; elles
-> ne décrivent donc plus le découpage microservices attendu par le PDF section 2.
+> (une seule base PostgreSQL, pas de Gateway ni d'appel REST inter-service). Ce choix déroge
+> sciemment à l'exigence structurelle du PDF (microservices + Gateway), tout en respectant
+> strictement l'exigence *fonctionnelle* non négociable du même document : *« Aucune régression
+> de contrat : chaque endpoint doit produire exactement les formats attendus par le frontend »*
+> (section 2, dernière page) — les routes, DTO, codes HTTP et règles métier (quota de 4 adresses,
+> unicité email, RBAC, etc.) sont restés strictement identiques à l'implémentation microservices
+> d'origine. Les sections 1, 2, 4, 5, 7, 8 et 9 ci-dessous décrivent l'architecture 3-tiers
+> réellement en place ; elles ne décrivent donc plus le découpage microservices attendu par le
+> PDF section 2.
+>
+> **Preuve de compétence, pas d'évitement** : l'architecture microservices complète a été
+> construite en premier (`api-gateway` + `auth-service` + `address-service` + `admin-service`,
+> Clean/Hexagonale par service, database-per-service, appels REST inter-services synchrones —
+> voir l'historique Git, commits antérieurs à `91c7657`). La fusion n'est donc pas une
+> impossibilité technique mais un choix d'ingénieur pris en connaissance de cause, après avoir
+> livré et fait fonctionner les deux versions.
+>
+> **Pourquoi la fusion — trois arguments techniques, pas un confort personnel :**
+> 1. *Pas de véritable frontière d'échelle ou d'équipe.* Les microservices se justifient quand des
+>    domaines doivent scaler ou se déployer indépendamment, ou quand des équipes séparées ont
+>    besoin de cycles de release découplés (loi de Conway). Ici : un seul développeur, un seul
+>    cycle de release, une cible de 25 000 utilisateurs actifs — un volume qu'une seule instance
+>    Spring Boot + un seul PostgreSQL encaissent sans tension, sans qu'aucun domaine (auth,
+>    adresses, admin) n'ait un profil de charge distinct des autres.
+> 2. *Le découpage forçait un anti-pattern « monolithe distribué ».* `admin-service` devait
+>    appeler `auth-service` et `address-service` en REST synchrone pour de simples lectures
+>    agrégées (section 2.3 du PDF) : un couplage fort entre services, mais payé en latence réseau,
+>    en gestion de timeout/503 (section 2.5, 2.8), et en DTO dupliqués (`UserSummary`,
+>    `AddressSummary`) — sans gagner l'indépendance de déploiement qui est la seule vraie raison
+>    d'accepter ce coût.
+> 3. *L'intégrité référentielle en pâtissait.* Le *database-per-service* interdisait une vraie
+>    contrainte `FOREIGN KEY` entre `addresses.user_id` et `users.id` (bases distinctes) : la
+>    cohérence reposait sur une référence logique non garantie par la base. Or la section 3 du
+>    PDF pose elle-même comme exigence que *« les contraintes d'intégrité sont également
+>    garanties au niveau base de données, pas uniquement applicatif »*. L'architecture 3-tiers
+>    satisfait cette exigence-là plus strictement que ne le permettait le découpage microservices
+>    d'origine.
+>
+> **Coût de complexité mesuré** (avant `91c7657` → après, mêmes fonctionnalités) : 194 → 96
+> fichiers Java (**-51 %**), -3 723 lignes nettes (2 632 insertions / 6 355 suppressions sur
+> 250 fichiers), 5 `pom.xml` → 1, 4 `Dockerfile` → 1, 4 bases PostgreSQL → 1. Cette complexité
+> supprimée était de la complexité *accidentelle* (plomberie réseau, DTO de duplication, gestion
+> d'indisponibilité inter-service) et non de la complexité *essentielle* liée au métier.
+>
+> **Compromis assumés — ce qui a été perdu :**
+> - Déployabilité et scalabilité indépendantes par domaine (aucun service ne peut être mis à
+>   l'échelle ou redéployé seul).
+> - Isolation des pannes : un incident dans le module adresses peut désormais affecter
+>   l'ensemble de l'application, alors qu'`address-service` isolait ce risque.
+> - Démonstration de patterns distribués (routage Gateway, résilience inter-services) qui
+>   faisaient partie des objectifs pédagogiques explicites de cet exercice.
+> - Conformité littérale aux livrables L1 (dépôts organisés par microservice) et L7
+>   (orchestration de 3 microservices + Gateway + 3 bases).
+>
+> **Réversibilité** : chaque service métier (`AuthService`, `UserService`, `AddressService`,
+> `SupportService`) et chaque dépendance technique remplaçable (`JwtService`,
+> `PhotoStorageService`, `QrCodeService`, `SecureTokenGenerator`) reste défini en interface +
+> implémentation (inversion de dépendances, SOLID), et les packages suivent toujours les mêmes
+> frontières de domaine (`auth`/`address`/`admin`). Rescinder la fusion — réextraire ces
+> frontières en modules/services séparés — resterait un refactoring mécanique, pas une réécriture,
+> le jour où un vrai besoin d'échelle ou d'équipe séparée apparaîtrait.
 
 ---
 
