@@ -25,7 +25,7 @@ jobs:
         run: docker build -t findme-backend:${{ github.event.workflow_run.head_sha }} .
 
       - name: Scan Trivy (bloquant sur HIGH/CRITICAL)
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: findme-backend:${{ github.event.workflow_run.head_sha }}
           format: sarif
