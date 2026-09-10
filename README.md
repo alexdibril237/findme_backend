@@ -103,3 +103,29 @@ dossier de conception, section 11.
 JWT signé (HMAC-SHA256), access token courte durée + refresh token opaque avec rotation, RBAC à
 trois rôles (USER, ADMIN, SUPPORT_AGENT), mots de passe hashés BCrypt. Détails complets dans le
 dossier de conception (section 7) et le rapport de sécurité (`docs/SECURITE.md`).
+
+## CI/CD
+
+Pipeline GitHub Actions (Module 7 DHI Academy) :
+
+```
+push/PR sur main
+  → CI : secret scan (Gitleaks) → build → tests unitaires → tests d'intégration
+    (Testcontainers) → Quality Gate JaCoCo (65% lignes / 55% branches)
+  → CodeQL (SAST, à chaque push/PR + planifié le lundi)
+  → Dependabot (SCA, hebdomadaire, PR automatiques)
+  → CD (si CI verte) : build Docker → scan Trivy (bloquant HIGH/CRITICAL)
+    → publication GHCR (tag SHA + latest) → déploiement Render → smoke test /actuator/health
+```
+
+Le déploiement automatisé ne concerne que l'environnement de **test**. Chaque image est publiée
+avec un tag SHA immuable (`ghcr.io/alexdibril237/findme_backend:sha-<commit>`), jamais uniquement
+`latest`, afin de permettre un rollback fiable.
+
+**Rollback** : en cas d'échec du smoke test ou d'incident après déploiement, redéclencher
+manuellement le déploiement Render avec l'`imageUrl` pointant vers le tag SHA du commit précédent
+connu pour être stable (visible dans l'onglet **Packages** du dépôt GitHub).
+
+**Secrets/variables GitHub à configurer** (Settings → Secrets and variables → Actions) :
+- `RENDER_SERVICE_ID`, `RENDER_API_KEY` (secrets) : identifiants du service Render.
+- `RENDER_TEST_URL` (variable) : URL publique de l'environnement de test.
