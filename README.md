@@ -127,5 +127,7 @@ manuellement le déploiement Render avec l'`imageUrl` pointant vers le tag SHA d
 connu pour être stable (visible dans l'onglet **Packages** du dépôt GitHub).
 
 **Secrets/variables GitHub à configurer** (Settings → Secrets and variables → Actions) :
-- `RENDER_SERVICE_ID`, `RENDER_API_KEY` (secrets) : identifiants du service Render.
+- `RENDER_DEPLOY_HOOK_URL` (secret) : URL de Deploy Hook du service Render (Settings du service →
+  Deploy Hook sur render.com). Le service Render doit être configuré pour tirer l'image
+  `ghcr.io/alexdibril237/findme_backend:latest`.
 - `RENDER_TEST_URL` (variable) : URL publique de l'environnement de test.

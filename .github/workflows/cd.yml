@@ -60,11 +60,8 @@ jobs:
       name: test
       url: ${{ vars.RENDER_TEST_URL }}
     steps:
-      - name: Déclenchement du déploiement Render
-        run: |
-          curl -X POST "https://api.render.com/deploy/${{ secrets.RENDER_SERVICE_ID }}" \
-            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
-            -d "{\"imageUrl\": \"ghcr.io/${{ github.repository }}:sha-${{ github.event.workflow_run.head_sha }}\"}"
+      - name: Déclenchement du déploiement Render (Deploy Hook)
+        run: curl --fail -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
 
       - name: Attente de la fin du déploiement
         run: sleep 30
