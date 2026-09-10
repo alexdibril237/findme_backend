@@ -1,0 +1,81 @@
+name: CD
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    branches: [main]
+    types: [completed]
+
+permissions:
+  contents: read
+  packages: write
+  security-events: write
+
+jobs:
+  container-scan-and-publish:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Récupération du code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Build de l'image
+        run: docker build -t findme-backend:${{ github.event.workflow_run.head_sha }} .
+
+      - name: Scan Trivy (bloquant sur HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: findme-backend:${{ github.event.workflow_run.head_sha }}
+          format: sarif
+          output: trivy-results.sarif
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+
+      - name: Upload des résultats Trivy vers l'onglet Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+
+      - name: Authentification GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag et publication de l'image (SHA immuable + latest)
+        run: |
+          docker tag findme-backend:${{ github.event.workflow_run.head_sha }} ghcr.io/${{ github.repository }}:sha-${{ github.event.workflow_run.head_sha }}
+          docker tag findme-backend:${{ github.event.workflow_run.head_sha }} ghcr.io/${{ github.repository }}:latest
+          docker push ghcr.io/${{ github.repository }}:sha-${{ github.event.workflow_run.head_sha }}
+          docker push ghcr.io/${{ github.repository }}:latest
+
+  deploy-test:
+    needs: container-scan-and-publish
+    runs-on: ubuntu-latest
+    environment:
+      name: test
+      url: ${{ vars.RENDER_TEST_URL }}
+    steps:
+      - name: Déclenchement du déploiement Render
+        run: |
+          curl -X POST "https://api.render.com/deploy/${{ secrets.RENDER_SERVICE_ID }}" \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            -d "{\"imageUrl\": \"ghcr.io/${{ github.repository }}:sha-${{ github.event.workflow_run.head_sha }}\"}"
+
+      - name: Attente de la fin du déploiement
+        run: sleep 30
+
+      - name: Smoke test (endpoint de santé)
+        run: curl --fail ${{ vars.RENDER_TEST_URL }}/actuator/health
+
+  notify-failure:
+    needs: [container-scan-and-publish, deploy-test]
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Alerter en cas d'échec
+        run: echo "::error::Le déploiement CD de findme-backend a échoué pour le commit ${{ github.event.workflow_run.head_sha }}"
