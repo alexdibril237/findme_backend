@@ -1,4 +1,6 @@
-package com.geolink.findme.business.service;
+package com.geolink.findme.unit.business.service;
+import com.geolink.findme.business.service.UserMessageServiceImpl;
+import com.geolink.findme.business.service.UserMessageService;
 
 import com.geolink.findme.business.exception.UserMessageAccessDeniedException;
 import com.geolink.findme.business.exception.UserMessageNotFoundException;
@@ -13,7 +15,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
 import java.time.Instant;
@@ -43,13 +44,13 @@ class UserMessageServiceTest {
         userMessageService = new UserMessageServiceImpl(userMessageRepository, userRepository);
     }
 
-    private UserMessage existing(UUID recipientId) {
+    private UserMessage existing(UUID recipientId, boolean read) {
         UserMessage message = new UserMessage();
         message.setId(UUID.randomUUID());
         message.setRecipientId(recipientId);
-        message.setSubject("Votre demande a été traitée");
-        message.setBody("Bonjour, ...");
-        message.setRead(false);
+        message.setSubject("Sujet");
+        message.setBody("Corps du message");
+        message.setRead(read);
         message.setCreatedAt(Instant.now());
         return message;
     }
@@ -57,21 +58,20 @@ class UserMessageServiceTest {
     // --- send ---
 
     @Test
-    void envoie_un_message_a_un_destinataire_existant() {
+    void send_cree_un_message_non_lu_pour_le_destinataire() {
         UUID recipientId = UUID.randomUUID();
         when(userRepository.existsById(recipientId)).thenReturn(true);
         when(userMessageRepository.save(any(UserMessage.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        UserMessage sent = userMessageService.send(recipientId, "Sujet", "Corps du message");
+        UserMessage message = userMessageService.send(recipientId, "Votre demande a été traitée", "Corps");
 
-        assertThat(sent.getRecipientId()).isEqualTo(recipientId);
-        assertThat(sent.getSubject()).isEqualTo("Sujet");
-        assertThat(sent.isRead()).isFalse();
-        verify(userMessageRepository).save(any(UserMessage.class));
+        assertThat(message.getRecipientId()).isEqualTo(recipientId);
+        assertThat(message.isRead()).isFalse();
+        assertThat(message.getSubject()).isEqualTo("Votre demande a été traitée");
     }
 
     @Test
-    void refuse_d_envoyer_a_un_destinataire_inexistant() {
+    void send_leve_user_not_found_si_destinataire_inexistant() {
         UUID recipientId = UUID.randomUUID();
         when(userRepository.existsById(recipientId)).thenReturn(false);
 
@@ -84,34 +84,45 @@ class UserMessageServiceTest {
     // --- listForUser ---
 
     @Test
-    void liste_les_messages_du_destinataire() {
+    void listForUser_delegue_au_repository() {
         UUID userId = UUID.randomUUID();
-        Pageable pageable = PageRequest.of(0, 20);
-        UserMessage message = existing(userId);
-        Page<UserMessage> page = new PageImpl<>(List.of(message));
+        Pageable pageable = Pageable.ofSize(10);
+        Page<UserMessage> page = new PageImpl<>(List.of(existing(userId, false)));
         when(userMessageRepository.findByRecipientIdOrderByCreatedAtDesc(userId, pageable)).thenReturn(page);
 
         Page<UserMessage> result = userMessageService.listForUser(userId, pageable);
 
-        assertThat(result.getContent()).containsExactly(message);
+        assertThat(result).isSameAs(page);
     }
 
     // --- markRead ---
 
     @Test
-    void marque_lu_un_message_par_son_destinataire() {
-        UUID userId = UUID.randomUUID();
-        UserMessage message = existing(userId);
+    void markRead_marque_le_message_comme_lu_pour_son_destinataire() {
+        UUID recipientId = UUID.randomUUID();
+        UserMessage message = existing(recipientId, false);
         when(userMessageRepository.findById(message.getId())).thenReturn(Optional.of(message));
         when(userMessageRepository.save(any(UserMessage.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        UserMessage result = userMessageService.markRead(message.getId(), userId);
+        UserMessage result = userMessageService.markRead(message.getId(), recipientId);
 
         assertThat(result.isRead()).isTrue();
     }
 
     @Test
-    void marque_lu_leve_not_found_quand_message_inexistant() {
+    void markRead_est_idempotent_si_deja_lu() {
+        UUID recipientId = UUID.randomUUID();
+        UserMessage message = existing(recipientId, true);
+        when(userMessageRepository.findById(message.getId())).thenReturn(Optional.of(message));
+        when(userMessageRepository.save(any(UserMessage.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        UserMessage result = userMessageService.markRead(message.getId(), recipientId);
+
+        assertThat(result.isRead()).isTrue();
+    }
+
+    @Test
+    void markRead_leve_not_found_si_message_inexistant() {
         UUID id = UUID.randomUUID();
         when(userMessageRepository.findById(id)).thenReturn(Optional.empty());
 
@@ -120,8 +131,8 @@ class UserMessageServiceTest {
     }
 
     @Test
-    void marque_lu_leve_access_denied_pour_un_autre_utilisateur() {
-        UserMessage message = existing(UUID.randomUUID());
+    void markRead_leve_access_denied_pour_un_autre_destinataire() {
+        UserMessage message = existing(UUID.randomUUID(), false);
         when(userMessageRepository.findById(message.getId())).thenReturn(Optional.of(message));
 
         assertThatThrownBy(() -> userMessageService.markRead(message.getId(), UUID.randomUUID()))

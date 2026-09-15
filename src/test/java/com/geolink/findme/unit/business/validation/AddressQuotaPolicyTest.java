@@ -1,4 +1,5 @@
-package com.geolink.findme.business.validation;
+package com.geolink.findme.unit.business.validation;
+import com.geolink.findme.business.validation.AddressQuotaPolicy;
 
 import com.geolink.findme.business.exception.AddressQuotaExceededException;
 import org.junit.jupiter.api.Test;

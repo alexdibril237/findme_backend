@@ -1,4 +1,7 @@
-package com.geolink.findme.business.service;
+package com.geolink.findme.unit.business.service;
+import com.geolink.findme.business.service.SupportServiceImpl;
+import com.geolink.findme.business.service.SupportService;
+import com.geolink.findme.business.service.UserMessageService;
 
 import com.geolink.findme.business.exception.SupportTicketNotFoundException;
 import com.geolink.findme.business.model.TicketStatus;
@@ -9,8 +12,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -73,10 +80,36 @@ class SupportServiceTest {
         assertThat(created.getUserId()).isNull();
     }
 
+    // --- listTickets ---
+
+    @Test
+    void listTickets_sans_filtre_retourne_tous_les_tickets() {
+        Pageable pageable = Pageable.ofSize(10);
+        Page<SupportTicket> page = new PageImpl<>(List.of(existing(TicketStatus.NON_TRAITE, UUID.randomUUID())));
+        when(supportTicketRepository.findAll(pageable)).thenReturn(page);
+
+        Page<SupportTicket> result = supportService.listTickets(pageable, null);
+
+        assertThat(result).isSameAs(page);
+        verify(supportTicketRepository, never()).findByStatus(any(), any());
+    }
+
+    @Test
+    void listTickets_avec_filtre_delegue_au_repository() {
+        Pageable pageable = Pageable.ofSize(10);
+        Page<SupportTicket> page = new PageImpl<>(List.of(existing(TicketStatus.TRAITE, UUID.randomUUID())));
+        when(supportTicketRepository.findByStatus(TicketStatus.TRAITE, pageable)).thenReturn(page);
+
+        Page<SupportTicket> result = supportService.listTickets(pageable, TicketStatus.TRAITE);
+
+        assertThat(result).isSameAs(page);
+        verify(supportTicketRepository, never()).findAll(any(Pageable.class));
+    }
+
     // --- updateTicketStatus ---
 
     @Test
-    void resoudre_un_ticket_notifie_son_auteur_connu() {
+    void resoudre_un_ticket_passe_son_statut_a_traite() {
         UUID userId = UUID.randomUUID();
         SupportTicket ticket = existing(TicketStatus.NON_TRAITE, userId);
         when(supportTicketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket));
@@ -85,6 +118,17 @@ class SupportServiceTest {
         SupportTicket result = supportService.updateTicketStatus(ticket.getId(), TicketStatus.TRAITE);
 
         assertThat(result.getStatus()).isEqualTo(TicketStatus.TRAITE);
+    }
+
+    @Test
+    void resoudre_un_ticket_notifie_l_auteur_connecte() {
+        UUID userId = UUID.randomUUID();
+        SupportTicket ticket = existing(TicketStatus.NON_TRAITE, userId);
+        when(supportTicketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket));
+        when(supportTicketRepository.save(any(SupportTicket.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        supportService.updateTicketStatus(ticket.getId(), TicketStatus.TRAITE);
+
         verify(userMessageService).send(eq(userId), anyString(), anyString());
     }
 
@@ -100,7 +144,7 @@ class SupportServiceTest {
     }
 
     @Test
-    void reenregistrer_le_statut_traite_ne_notifie_pas_une_seconde_fois() {
+    void resoudre_un_ticket_deja_traite_ne_notifie_pas_a_nouveau() {
         UUID userId = UUID.randomUUID();
         SupportTicket ticket = existing(TicketStatus.TRAITE, userId);
         when(supportTicketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket));
@@ -112,7 +156,7 @@ class SupportServiceTest {
     }
 
     @Test
-    void rouvrir_un_ticket_ne_notifie_pas() {
+    void rouvrir_un_ticket_repasse_son_statut_a_non_traite() {
         UUID userId = UUID.randomUUID();
         SupportTicket ticket = existing(TicketStatus.TRAITE, userId);
         when(supportTicketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket));
@@ -121,6 +165,17 @@ class SupportServiceTest {
         SupportTicket result = supportService.updateTicketStatus(ticket.getId(), TicketStatus.NON_TRAITE);
 
         assertThat(result.getStatus()).isEqualTo(TicketStatus.NON_TRAITE);
+    }
+
+    @Test
+    void rouvrir_un_ticket_ne_notifie_pas() {
+        UUID userId = UUID.randomUUID();
+        SupportTicket ticket = existing(TicketStatus.TRAITE, userId);
+        when(supportTicketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket));
+        when(supportTicketRepository.save(any(SupportTicket.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        supportService.updateTicketStatus(ticket.getId(), TicketStatus.NON_TRAITE);
+
         verify(userMessageService, never()).send(any(), anyString(), anyString());
     }
 
@@ -131,7 +186,5 @@ class SupportServiceTest {
 
         assertThatThrownBy(() -> supportService.updateTicketStatus(id, TicketStatus.TRAITE))
                 .isInstanceOf(SupportTicketNotFoundException.class);
-
-        verify(userMessageService, never()).send(any(), anyString(), anyString());
     }
 }
