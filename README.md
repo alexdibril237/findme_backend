@@ -82,7 +82,12 @@ fidme/
 │   └── db/migration/       # Migrations Flyway
 ├── docs/
 │   ├── conception/           # Dossier de conception complet (L2)
+│   ├── sla/                  # SLA/SLO/KPI/métriques (Module 7 Partie 2)
 │   └── frontend-api-contract.md  # Audit du contrat réel du Projet 4
+├── infra/                    # IaC Terraform + monitoring (Module 7 Partie 2)
+│   ├── prometheus/           # Config de scrape + règles d'alerte
+│   ├── alertmanager/         # Routage des alertes
+│   └── grafana/provisioning/ # Datasource + dashboard SLA
 ├── docker-compose.yml
 ├── Dockerfile
 └── pom.xml                   # POM unique (application mono-module)
@@ -131,3 +136,62 @@ connu pour être stable (visible dans l'onglet **Packages** du dépôt GitHub).
   Deploy Hook sur render.com). Le service Render doit être configuré pour tirer l'image
   `ghcr.io/alexdibril237/findme_backend:latest`.
 - `RENDER_TEST_URL` (variable) : URL publique de l'environnement de test.
+
+## Infrastructure as Code & Monitoring (Module 7 Partie 2)
+
+En complément de Render (déploiement réel), le dossier `infra/` fournit une stack de
+monitoring **locale et reproductible**, décrite en Terraform (provider Docker), conforme au
+Module 7 Partie 2 (DHI Academy) : `PROJET_6...` remplacé ici par
+`Module 7 DevOps - Partie 2 - Infrastructure as Code & Monitoring orientés SLA.pdf`.
+
+Chaîne complète : **SLA → SLO → KPI → Métriques → Instrumentation → Monitoring → Alerting →
+Vérification**, documentée dans [`docs/sla/sla-findme.md`](docs/sla/sla-findme.md).
+
+```
+findme-backend (Micrometer) → /actuator/prometheus → Prometheus (scrape 15s)
+                                                          │
+                                              ┌───────────┴───────────┐
+                                              ▼                       ▼
+                                          Grafana                Alertmanager
+                                     (dashboard SLA)          (règles → notifications)
+```
+
+### Lancer la stack
+
+```bash
+cd infra
+cp terraform.tfvars.example terraform.tfvars   # renseigner un JWT_SECRET réel
+terraform init
+terraform plan
+terraform apply
+```
+
+| Service | URL |
+|---|---|
+| findme-backend | http://localhost:8080 |
+| Prometheus | http://localhost:9090 |
+| Grafana (admin / mot de passe défini dans terraform.tfvars) | http://localhost:3000 |
+| Alertmanager | http://localhost:9093 |
+
+`terraform destroy` détruit proprement l'ensemble (réseau, conteneurs, volume PostgreSQL
+dédié à cette stack — indépendant de celui de `docker-compose.yml`).
+
+### Tester les alertes (fault injection)
+
+L'image déployée avec `SPRING_PROFILES_ACTIVE=training` (valeur par défaut de cette stack)
+expose un endpoint de simulation de panne, **inexistant dans tout autre profil** :
+
+```bash
+# Injecter 500ms de latence + 20% d'erreurs sur /api/addresses/**
+curl -X POST "http://localhost:8080/api/addresses/_simulate?delayMs=500&errorRate=0.2"
+
+# Observer l'alerte passer de "pending" à "firing" après 5 minutes
+curl http://localhost:9090/api/v1/alerts
+
+# Revenir à la normale
+curl -X POST "http://localhost:8080/api/addresses/_simulate?delayMs=0&errorRate=0"
+```
+
+Les règles d'alerte (`infra/prometheus/rules.yml`) et le dashboard Grafana
+(`infra/grafana/provisioning/dashboards/findme-sla.json`) sont tous deux dérivés de la
+matrice SLA → KPI de `docs/sla/sla-findme.md` — aucun seuil n'y est choisi arbitrairement.

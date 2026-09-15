@@ -1,0 +1,15 @@
+route:
+  receiver: default
+  group_by: ["alertname"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 1h
+
+receivers:
+  - name: default
+    # Webhook factice pour la formation : remplacer par un vrai récepteur (Slack, e-mail,
+    # PagerDuty...) avant tout usage réel. Voir docs/sla/sla-findme.md pour la matrice
+    # d'alertes que ce fichier met en œuvre.
+    webhook_configs:
+      - url: "http://localhost:5001/alerts"
+        send_resolved: true

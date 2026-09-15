@@ -1,0 +1,6 @@
+# Copier en terraform.tfvars et renseigner des valeurs réelles avant `terraform apply`.
+# terraform.tfvars est dans infra/.gitignore : ne jamais committer de secret réel.
+
+app_image  = "ghcr.io/alexdibril237/findme_backend:latest"
+app_port   = 8080
+jwt_secret = "change-me-please-use-a-long-random-value-min-32-bytes"

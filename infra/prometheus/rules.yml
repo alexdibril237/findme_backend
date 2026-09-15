@@ -1,0 +1,47 @@
+# Règles d'alerte construites à partir de la matrice SLA → SLO → KPI de
+# docs/sla/sla-findme.md. Chaque alerte ci-dessous correspond à une ligne précise de cette
+# matrice ; ne pas ajouter de seuil qui n'y est pas documenté.
+groups:
+  - name: findme-backend-sla
+    rules:
+      - alert: ServiceDown
+        expr: up{job="findme-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "findme-backend est indisponible"
+          description: "La cible findme-backend ne répond plus depuis 1 minute."
+
+      - alert: HighLatency
+        expr: >
+          histogram_quantile(0.95,
+            sum(rate(http_server_requests_seconds_bucket{job="findme-backend"}[5m])) by (le)
+          ) > 0.3
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Latence p95 au-dessus du SLA"
+          description: "p95 > 300ms depuis 5 minutes sur findme-backend."
+
+      - alert: ErrorRateHigh
+        expr: >
+          sum(rate(http_server_requests_seconds_count{job="findme-backend", status=~"5.."}[5m]))
+          /
+          sum(rate(http_server_requests_seconds_count{job="findme-backend"}[5m])) > 0.01
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Taux d'erreur au-dessus du SLA"
+          description: "Plus de 1% de requêtes en erreur depuis 5 minutes sur findme-backend."
+
+      - alert: HighCpuUsage
+        expr: process_cpu_usage{job="findme-backend"} > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Utilisation CPU élevée"
+          description: "CPU > 80% depuis 5 minutes, cause possible de dégradation."

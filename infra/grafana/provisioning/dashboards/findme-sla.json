@@ -1,0 +1,110 @@
+{
+  "title": "findme-backend — SLA",
+  "uid": "findme-sla",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "timezone": "browser",
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "15s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Le service est-il disponible ?",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        { "expr": "up{job=\"findme-backend\"}", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Le temps de réponse augmente-t-il ? (p95, SLO 250ms / SLA 300ms)",
+      "gridPos": { "h": 6, "w": 18, "x": 6, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{job=\"findme-backend\"}[5m])) by (le))",
+          "legendFormat": "p95 (s)",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 0.25 },
+              { "color": "red", "value": 0.3 }
+            ]
+          },
+          "custom": { "thresholdsStyle": { "mode": "line" } }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Le taux d'erreur est-il acceptable ? (seuil SLA 1%)",
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 6 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(http_server_requests_seconds_count{job=\"findme-backend\", status=~\"5..\"}[5m])) / sum(rate(http_server_requests_seconds_count{job=\"findme-backend\"}[5m]))",
+          "legendFormat": "taux d'erreur 5xx",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 0.01 }] },
+          "custom": { "thresholdsStyle": { "mode": "line" } }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Quelle est la charge actuelle ? (requêtes/s)",
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 6 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(http_server_requests_seconds_count{job=\"findme-backend\"}[1m]))",
+          "legendFormat": "req/s",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Les ressources sont-elles limitantes ? (CPU, seuil 80%)",
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        { "expr": "process_cpu_usage{job=\"findme-backend\"}", "legendFormat": "CPU", "refId": "A" },
+        { "expr": "jvm_memory_used_bytes{job=\"findme-backend\", area=\"heap\"}", "legendFormat": "Heap utilisé (bytes)", "refId": "B" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 0.8 }] },
+          "custom": { "thresholdsStyle": { "mode": "line" } }
+        }
+      }
+    }
+  ]
+}

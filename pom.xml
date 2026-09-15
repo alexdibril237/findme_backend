@@ -60,6 +60,12 @@
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
         <dependency>
+            <!-- Monitoring orienté SLA (Module 7 Partie 2) : expose /actuator/prometheus,
+                 scrapé par Prometheus (voir infra/prometheus/prometheus.yml). -->
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-core</artifactId>
         </dependency>

@@ -25,6 +25,12 @@ public class SecurityConfig {
             "/api/auth/reset-password",
             "/actuator/health",
             "/actuator/info",
+            // Scrapé par Prometheus sur le réseau Docker interne (jamais publié sur l'hôte
+            // en production) ; voir docs/sla/sla-findme.md.
+            "/actuator/prometheus",
+            // Endpoint d'injection de pannes (latence/erreurs) pour tester les alertes du
+            // module Monitoring : n'existe (404) que si le profil Spring "training" est actif.
+            "/api/addresses/_simulate",
             "/v3/api-docs/**",
             "/swagger-ui/**",
             "/swagger-ui.html",
