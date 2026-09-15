@@ -23,6 +23,12 @@ public class SecureTokenGeneratorImpl implements SecureTokenGenerator {
     }
 
     @Override
+    public String generateNumericCode() {
+        int code = RANDOM.nextInt(1_000_000);
+        return String.format("%06d", code);
+    }
+
+    @Override
     public String hash(String rawToken) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");

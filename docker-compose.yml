@@ -30,6 +30,7 @@ services:
       DB_USER: findme_user
       DB_PASSWORD: findme_pass
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
       STORAGE_ROOT: /data/photos
       STORAGE_PUBLIC_BASE_URL: http://localhost:8080/files
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}

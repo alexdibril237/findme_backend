@@ -14,6 +14,7 @@ import com.geolink.findme.data.entity.User;
 import com.geolink.findme.data.repository.PasswordResetTokenRepository;
 import com.geolink.findme.data.repository.RefreshTokenRepository;
 import com.geolink.findme.data.repository.UserRepository;
+import com.geolink.findme.security.EmailService;
 import com.geolink.findme.security.JwtService;
 import com.geolink.findme.security.SecureTokenGenerator;
 import org.slf4j.Logger;
@@ -38,12 +39,13 @@ public class AuthServiceImpl implements AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final SecureTokenGenerator secureTokenGenerator;
+    private final EmailService emailService;
     private final Duration refreshTokenTtl;
     private final Duration resetTokenTtl;
 
     public AuthServiceImpl(UserRepository userRepository, RefreshTokenRepository refreshTokenRepository,
                             PasswordResetTokenRepository passwordResetTokenRepository, PasswordEncoder passwordEncoder,
-                            JwtService jwtService, SecureTokenGenerator secureTokenGenerator,
+                            JwtService jwtService, SecureTokenGenerator secureTokenGenerator, EmailService emailService,
                             @Value("${jwt.refresh-token-ttl-days:7}") long refreshTokenTtlDays,
                             @Value("${jwt.reset-token-ttl-minutes:30}") long resetTokenTtlMinutes) {
         this.userRepository = userRepository;
@@ -52,6 +54,7 @@ public class AuthServiceImpl implements AuthService {
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.secureTokenGenerator = secureTokenGenerator;
+        this.emailService = emailService;
         this.refreshTokenTtl = Duration.ofDays(refreshTokenTtlDays);
         this.resetTokenTtl = Duration.ofMinutes(resetTokenTtlMinutes);
     }
@@ -148,7 +151,9 @@ public class AuthServiceImpl implements AuthService {
     public void forgotPassword(String rawEmail) {
         String email = EmailPolicy.normalize(rawEmail);
         userRepository.findByEmail(email).ifPresent(user -> {
-            String rawToken = secureTokenGenerator.generateOpaqueToken();
+            // Code numérique (plutôt qu'un token opaque) : plus simple à lire/saisir
+            // depuis un email, tout en réutilisant le même stockage hashé.
+            String rawToken = secureTokenGenerator.generateNumericCode();
             PasswordResetToken resetToken = new PasswordResetToken();
             resetToken.setId(UUID.randomUUID());
             resetToken.setUserId(user.getId());
@@ -157,9 +162,7 @@ public class AuthServiceImpl implements AuthService {
             resetToken.setUsed(false);
             resetToken.setCreatedAt(Instant.now());
             passwordResetTokenRepository.save(resetToken);
-            // Pas de fournisseur SMTP réel (hors périmètre du contrat backend figé) : le lien est
-            // journalisé pour la démonstration/soutenance. Ne jamais logger le token en clair en production.
-            log.info("[DEMO] Lien de réinitialisation pour {} : /auth/reset-password?token={}", user.getEmail(), rawToken);
+            emailService.sendPasswordResetCode(user.getEmail(), rawToken);
         });
     }
 
