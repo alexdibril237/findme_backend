@@ -24,6 +24,9 @@
         <jjwt.version>0.12.6</jjwt.version>
         <testcontainers.version>1.21.3</testcontainers.version>
         <jacoco.version>0.8.13</jacoco.version>
+        <!-- Overrides de securite (CVE) au-dela des versions gerees par spring-boot-starter-parent 4.1.0 -->
+        <tomcat.version>11.0.25</tomcat.version>
+        <postgresql.version>42.7.12</postgresql.version>
     </properties>
 
     <dependencyManagement>
