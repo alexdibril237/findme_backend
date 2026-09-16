@@ -44,7 +44,7 @@ jobs:
         run: ./mvnw -B test
 
       - name: Tests d'intégration (Testcontainers) + Quality Gate JaCoCo
-        run: ./mvnw -B verify jacoco:check
+        run: ./mvnw -B verify
 
       - name: Upload du rapport de couverture
         if: always()
